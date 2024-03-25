@@ -9,7 +9,6 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tensorflow.contrib.eager as tfe
 from sklearn.tree import DecisionTreeClassifier
 
 from carla.models.api import MLModel
@@ -20,6 +19,12 @@ from carla.recourse_methods.processing import (
     check_counterfactuals,
     merge_default_parameters,
 )
+
+tf.compat.v1.enable_eager_execution(
+    config=None, device_policy=None, execution_mode=None
+)
+
+tf.compat.v1.disable_v2_behavior()
 
 
 def _filter_hinge_loss(n_class, mask_vector, features, sigma, temperature, model_fn):
@@ -49,9 +54,9 @@ def _filter_hinge_loss(n_class, mask_vector, features, sigma, temperature, model
     filtered_input = tf.boolean_mask(features, mask_vector)
 
     # if sigma or temperature are not scalars
-    if type(sigma) != float or type(sigma) != int:
+    if type(sigma) is not float or type(sigma) is not int:
         sigma = tf.boolean_mask(sigma, mask_vector)
-    if type(temperature) != float or type(temperature) != int:
+    if type(temperature) is not float or type(temperature) is not int:
         temperature = tf.boolean_mask(temperature, mask_vector)
 
     # compute loss
@@ -138,7 +143,7 @@ class FOCUS(RecourseMethod):
                 learning_rate=checked_hyperparams["lr"]
             )
         elif checked_hyperparams["optimizer"] == "gd":
-            self.optimizer = tf.train.GradientDescentOptimizer(
+            self.optimizer = tf.compat.v1.train.GradientDescentOptimizer(
                 learning_rate=checked_hyperparams["lr"]
             )
 
@@ -246,7 +251,7 @@ class FOCUS(RecourseMethod):
         # Little bit hacky, but needed as other tf code is graph based.
         # Graph based tf and eager execution for tf don't work together nicely.
         with tf.compat.v1.Session() as sess:
-            pf = tfe.py_func(f, [best_perturb], tf.float32)
+            pf = tf.py_function(f, [best_perturb], tf.float32)
             best_perturb = sess.run(pf)
 
         df_cfs = pd.DataFrame(best_perturb, columns=self.model.data.continuous)

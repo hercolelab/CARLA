@@ -150,8 +150,8 @@ class CEM(RecourseMethod):
             zt, self._orig, self._adv, self._assign_adv
         )
 
-        self._adv_updater = tf.assign(self._adv, self._assign_adv)
-        self._adv_updater_s = tf.assign(self._adv_s, self._assign_adv_s)
+        self._adv_updater = tf.compat.v1.assign(self._adv, self._assign_adv)
+        self._adv_updater_s = tf.compat.v1.assign(self._adv_s, self._assign_adv_s)
 
         # deviation delta
         delta = self._orig - self._adv
@@ -206,7 +206,7 @@ class CEM(RecourseMethod):
         )
         self._Loss_Overall = Loss_ToOptimize + tf.multiply(beta, self._Loss_L1Dist)
 
-        learning_rate = tf.train.polynomial_decay(
+        learning_rate = tf.compat.v1.train.polynomial_decay(
             self._hyperparams["init_learning_rate"],
             self._global_step,
             self._hyperparams["max_iterations"],
@@ -215,18 +215,20 @@ class CEM(RecourseMethod):
         )
 
         self._train = self._optimization(Loss_ToOptimize_s, self._adv_s, learning_rate)
-        start_vars = set(x.name for x in tf.global_variables())
-        new_vars = [x for x in tf.global_variables() if x.name not in start_vars]
+        start_vars = set(x.name for x in tf.compat.v1.global_variables())
+        new_vars = [
+            x for x in tf.compat.v1.global_variables() if x.name not in start_vars
+        ]
 
         # these are the variables to initialize when we run
         self._setup = self._set_setup()
 
-        self._init = tf.variables_initializer(
+        self._init = tf.compat.v1.variables_initializer(
             var_list=[self._global_step] + [self._adv_s] + [self._adv] + new_vars
         )
 
     def _optimization(self, Loss_ToOptimize_s, adv_s, learning_rate):
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+        optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate)
         return optimizer.minimize(
             Loss_ToOptimize_s,
             var_list=[adv_s],
@@ -298,13 +300,13 @@ class CEM(RecourseMethod):
         self._const = tf.Variable(np.zeros(batch_size), dtype=tf.float32)
         self._global_step = tf.Variable(0.0, trainable=False)
         # and here's what we use to assign them
-        self._assign_orig = tf.placeholder(tf.float32, shape_batch)
-        self._assign_adv = tf.placeholder(tf.float32, shape_batch)
-        self._assign_adv_s = tf.placeholder(tf.float32, shape_batch)
-        self._assign_target_label = tf.placeholder(
+        self._assign_orig = tf.compat.v1.placeholder(tf.float32, shape_batch)
+        self._assign_adv = tf.compat.v1.placeholder(tf.float32, shape_batch)
+        self._assign_adv_s = tf.compat.v1.placeholder(tf.float32, shape_batch)
+        self._assign_target_label = tf.compat.v1.placeholder(
             tf.float32, (batch_size, num_classes)
         )
-        self._assign_const = tf.placeholder(tf.float32, [batch_size])
+        self._assign_const = tf.compat.v1.placeholder(tf.float32, [batch_size])
 
     def _compute_target_lab_score(
         self, target_label, label_score: tf.Tensor

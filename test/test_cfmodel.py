@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from tensorflow import Graph, Session
+import tensorflow as tf
+from tensorflow import Graph
 
 from carla.data.catalog import OnlineCatalog
 from carla.models.catalog import MLModelCatalog
@@ -126,7 +127,7 @@ def test_cem_get_counterfactuals(model_type):
 
     graph = Graph()
     with graph.as_default():
-        ann_sess = Session()
+        ann_sess = tf.compat.v1.Session()
         with ann_sess.as_default():
             model_ann = MLModelCatalog(
                 data=data,
@@ -165,7 +166,7 @@ def test_cem_vae(model_type):
 
     graph = Graph()
     with graph.as_default():
-        ann_sess = Session()
+        ann_sess = tf.compat.v1.Session()
         with ann_sess.as_default():
             model_ann = MLModelCatalog(
                 data=data,

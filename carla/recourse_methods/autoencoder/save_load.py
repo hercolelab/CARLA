@@ -13,10 +13,10 @@ def get_home(models_home=None):
 
     if models_home is None:
         models_home = os.environ.get(
-            "CF_MODELS", os.path.join("~", "carla", "models", "autoencoders")
+            "CF_MODELS", os.path.join("carla", "models", "autoencoders")
         )
 
-    models_home = os.path.expanduser(models_home)
+    models_home = os.getcwd() + "/" + models_home
     if not os.path.exists(models_home):
         os.makedirs(models_home)
 

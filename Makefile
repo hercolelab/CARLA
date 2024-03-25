@@ -47,5 +47,5 @@ endif
 venv:
 ifeq ($(wildcard $(VENV_DIR)/*),)
 	mkdir -p $(VENV_DIR)
-	python3.7 -m venv $(VENV_DIR)
+	python3.9 -m venv $(VENV_DIR)
 endif

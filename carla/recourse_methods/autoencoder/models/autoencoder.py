@@ -108,27 +108,7 @@ class Autoencoder:
     def save(self, fitted_ae: Model) -> None:
 
         cache_path = get_home()
-
-        fitted_ae.save_weights(
-            os.path.join(
-                cache_path,
-                "{}_{}.{}".format(self.data_name, fitted_ae.input_shape[1], "h5"),
-            )
-        )
-
-        # save model
-        model_json = fitted_ae.to_json()
-
-        path = os.path.join(
-            cache_path,
-            "{}_{}.{}".format(self.data_name, fitted_ae.input_shape[1], "json"),
-        )
-
-        with open(
-            path,
-            "w",
-        ) as json_file:
-            json_file.write(model_json)
+        tf.saved_model.save(fitted_ae, cache_path)
 
     def load(self, input_shape: int) -> Model:
         """
@@ -160,8 +140,13 @@ class Autoencoder:
 
         # Build layers property from loaded model
         layers = []
-        for layer in model_ae.layers[:-1]:
-            layers.append(layer.output_shape[1])
+        for idx, layer in enumerate(model_ae.layers[:-1]):
+            if idx == 0:
+                layers.append(layer.output_shape[0][1])
+            else:
+                layers.append(layer.output_shape[1])
         self._layers = layers
 
-        return model_ae
+        # return model_ae
+
+        return tf.saved_model.load(cache_path)

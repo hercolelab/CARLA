@@ -1,5 +1,3 @@
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/carla-recourse?style=for-the-badge)](https://pypi.org/project/carla-recourse/) ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/carla-recourse/CARLA/CI?style=for-the-badge) [![Read the Docs](https://img.shields.io/readthedocs/carla-counterfactual-and-recourse-library?style=for-the-badge)](https://carla-counterfactual-and-recourse-library.readthedocs.io/en/latest/?badge=latest) ![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=for-the-badge)
-
 # CARLA - Counterfactual And Recourse Library
 
 <img align="right" width="240" height="200" src="https://github.com/carla-recourse/CARLA/blob/main/images/carla_logo_square.png?raw=true">
@@ -67,7 +65,7 @@ It is planned to make all recourse methods available for all ML frameworks . The
 
 ### Requirements
 
-- `python3.7`
+- `python3.11`
 - `pip`
 
 ### Install via pip
@@ -91,7 +89,7 @@ dataset = OnlineCatalog(data_name)
 model = MLModelCatalog(dataset, "ann")
 
 # get factuals from the data to generate counterfactual examples
-factuals = dataset.raw.iloc[:10]
+factuals = dataset.df.iloc[:10]
 
 # load a recourse model and pass black box model
 gs = GrowingSpheres(model)
@@ -105,7 +103,7 @@ counterfactuals = gs.get_counterfactuals(factuals)
 
 ### Requirements
 
-- `python3.7-venv` (when not already shipped with python3.7)
+- `python3.11-venv` (when not already shipped with python3.7)
 - Recommended: [GNU Make](https://www.gnu.org/software/make/)
 
 ### Installation

@@ -30,7 +30,7 @@ def test_transform():
         data_name, scaling_method="MinMax", encoding_method="OneHot_drop_binary"
     )
 
-    encoding_method = preprocessing.OneHotEncoder(handle_unknown="error", sparse=False)
+    encoding_method = preprocessing.OneHotEncoder(handle_unknown="error")
     transformed_data_fn = OnlineCatalog(
         data_name, scaling_method="MinMax", encoding_method=encoding_method
     )

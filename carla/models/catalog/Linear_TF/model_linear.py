@@ -65,7 +65,7 @@ class LinearModel:
         )
 
         hist = model
-        test_error = 1 - hist.history.history["val_accuracy"][-1]
+        test_error = 1 - hist.history.history["val_acc"][-1]
         print(f"Test {model_name} on {self.data_name}:", test_error)
 
         self.model = model

@@ -33,7 +33,7 @@ class AnnModel(nn.Module):
 
         # Activation
         self.relu = nn.ReLU()
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         """
