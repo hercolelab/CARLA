@@ -103,7 +103,7 @@ counterfactuals = gs.get_counterfactuals(factuals)
 
 ### Requirements
 
-- `python3.11-venv` (when not already shipped with python3.7)
+- `python3.11-venv` (when not already shipped with python3.11)
 - Recommended: [GNU Make](https://www.gnu.org/software/make/)
 
 ### Installation
