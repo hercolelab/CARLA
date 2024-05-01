@@ -357,7 +357,7 @@ class MLModelCatalog(MLModel):
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
-            # get preprocessed data
+            # get preprocessed data --> DATAFRAME
             df_train = self.data.df_train
             df_test = self.data.df_test
 
@@ -367,6 +367,7 @@ class MLModelCatalog(MLModel):
             y_test = df_test[self.data.target]
 
             # order data (column-wise) before training
+            # tutto in DataFrame
             x_train = self.get_ordered_features(x_train)
             x_test = self.get_ordered_features(x_test)
 

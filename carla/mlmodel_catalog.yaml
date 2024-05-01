@@ -1,3 +1,10 @@
+dataset3:
+  gnn:
+    pytorch:
+    feature_order:
+
+    conn:
+
 adult:
   ann:
     pytorch:

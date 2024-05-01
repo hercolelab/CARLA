@@ -1,18 +1,34 @@
+import time
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import xgboost
 from sklearn.ensemble import RandomForestClassifier
 from torch import nn
+from torch.nn.utils import clip_grad_norm
 from torch.utils.data import DataLoader, Dataset
+
+# from torch_geometric.utils import dense_to_sparse
+from torch_geometric.utils.metric import accuracy
 
 from carla.models.catalog.ANN_TF import AnnModel
 from carla.models.catalog.ANN_TF import AnnModel as ann_tf
 from carla.models.catalog.ANN_TORCH import AnnModel as ann_torch
+from carla.models.catalog.GNN_TORCH import GCNSynthetic as gnn_torch
 from carla.models.catalog.Linear_TF import LinearModel
 from carla.models.catalog.Linear_TF import LinearModel as linear_tf
 from carla.models.catalog.Linear_TORCH import LinearModel as linear_torch
+
+# new import
+from carla.models.catalog.parse_gnn import (
+    add_identifier,
+    construct_GraphData,
+    create_adj_matrix,
+    normalize_adj,
+)
 
 
 def train_model(
@@ -60,6 +76,8 @@ def train_model(
     Union[LinearModel, AnnModel, RandomForestClassifier, xgboost.XGBClassifier]
     """
     print(f"balance on test set {y_train.mean()}, balance on test set {y_test.mean()}")
+
+    # NON VEDERE QUESTO BRANCH
     if catalog_model.backend == "tensorflow":
         if catalog_model.model_type == "linear":
             model = linear_tf(
@@ -88,11 +106,36 @@ def train_model(
             model_name=catalog_model.model_type,
         )
         return model.model
+
+    # PYTORCH
+    # qua da mettere GNN
     elif catalog_model.backend == "pytorch":
-        train_dataset = DataFrameDataset(x_train, y_train)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        test_dataset = DataFrameDataset(x_test, y_test)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+        # aggiungere su mlmmodel_catalog.yaml "gnn"
+        # fare il branch solo se è un DatFrame e non quando è un Graph
+        if catalog_model.model_type == "gnn":
+            # construct graph data
+            x_trainID = add_identifier(x_train)
+            y_trainID = add_identifier(y_train)
+            merged_df = pd.merge(x_trainID, y_trainID, on="ID")
+
+            list_feat = x_train.columns.tolist()
+            list_lab = y_train.columns.tolist()
+            conn = ""  # da definire come parametro
+            # diz_conn da vedere
+            data_graph, values_edges, diz_conn = construct_GraphData(
+                merged_df, list_feat, list_lab, conn
+            )
+
+        else:  # linear and ann
+            train_dataset = DataFrameDataset(x_train, y_train)
+            train_loader = DataLoader(
+                train_dataset, batch_size=batch_size, shuffle=True
+            )
+            test_dataset = DataFrameDataset(x_test, y_test)
+            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+        # aggiungere GNN
         if catalog_model.model_type == "linear":
             model = linear_torch(
                 dim_input=x_train.shape[1], num_of_classes=len(pd.unique(y_train))
@@ -103,18 +146,49 @@ def train_model(
                 hidden_layers=hidden_size,
                 num_of_classes=len(pd.unique(y_train)),
             )
+
+        # aggiungere su mlmmodel_catalog.yaml "gnn"
+        elif catalog_model.model_type == "gnn":
+            # initialize the model
+            model = gnn_torch(
+                nfeat=len(data_graph.x[0]),
+                nhid=20,  # da parametrizzare
+                nout=20,  # da parametrizzare
+                nclass=len(data_graph.y[0]),
+                dropout=0.0,
+            )
+
         else:
             raise ValueError(
                 f"model type not recognized for backend {catalog_model.backend}"
             )
-        _training_torch(
-            model,
-            train_loader,
-            test_loader,
-            learning_rate,
-            epochs,
-        )
+        # DA RIVEDERE PER GNN
+
+        # training per gnn
+        if catalog_model.model_type == "gnn":
+            _training_gnn_torch(
+                model=model,
+                data_graph=data_graph,
+                values_edges=values_edges,
+                learn_rate=0.001,
+                weight_decay=0.001,
+                epochs=epochs,
+                clip=2.0,
+            )
+
+        # il training per ann e linear
+        else:
+            _training_torch(
+                model,
+                train_loader,
+                test_loader,
+                learning_rate,
+                epochs,
+            )
+
         return model
+
+    # NON VEDERE QUESTO
     elif catalog_model.backend == "sklearn":
         if catalog_model.model_type == "forest":
             random_forest_model = RandomForestClassifier(
@@ -133,6 +207,7 @@ def train_model(
             raise ValueError(
                 f"model type not recognized for backend {catalog_model.backend}"
             )
+    # NON VEDERE QUESTO
     elif catalog_model.backend == "xgboost":
         if catalog_model.model_type == "forest":
             param = {
@@ -157,6 +232,9 @@ def train_model(
         raise ValueError("model backend not recognized")
 
 
+# %%-------------------------------------------------------
+
+
 class DataFrameDataset(Dataset):
     def __init__(self, x: pd.DataFrame, y: pd.DataFrame):
         # PyTorch
@@ -171,6 +249,7 @@ class DataFrameDataset(Dataset):
         return self.X_train[idx], self.Y_train[idx]
 
 
+# %%-------------------------------------------------------
 def _training_torch(
     model,
     train_loader,
@@ -234,3 +313,81 @@ def _training_torch(
 
             print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
             print()
+
+
+# %%-------------------------------------------------------
+def _training_gnn_torch(
+    model, data_graph, values_edges, learn_rate, weight_decay, epochs, clip
+):
+    # use GPU
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+    # create adj matrix by COO and normalize it
+    adj = create_adj_matrix(data_graph, values_edges).squeeze()
+    # norm_edge_index = dense_to_sparse(adj) # da vedere
+    norm_adj = normalize_adj(adj)
+    features = torch.tensor(data_graph.x).squeeze()
+    labels = torch.tensor([list(elem).index(1) for elem in data_graph.y]).squeeze()
+
+    node_idx = [i for i in range(0, len(data_graph.y))]
+    idx_train = torch.masked_select(torch.Tensor(node_idx), data_graph.train_mask)
+    idx_test = torch.masked_select(torch.Tensor(node_idx), data_graph.test_mask)
+    idx_train = idx_train.type(torch.int64)
+    idx_test = idx_test.type(torch.int64)
+
+    # define optimizer
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=learn_rate, weight_decay=weight_decay
+    )
+
+    t_total = time.time()
+    for epoch in range(epochs):
+        t = time.time()
+        model.train()
+
+        optimizer.zero_grad()
+        output = model(features, norm_adj)
+
+        loss_train = model.loss(output[idx_train], labels[idx_train])
+
+        y_pred = torch.argmax(output, dim=1)
+
+        acc_train = accuracy(y_pred[idx_train], labels[idx_train])
+
+        loss_train.backward()
+
+        clip_grad_norm(model.parameters(), clip)
+        optimizer.step()
+        print(
+            "Epoch: {:04d}".format(epoch + 1),
+            "loss_train: {:.4f}".format(loss_train.item()),
+            "acc_train: {:.4f}".format(acc_train),
+            "time: {:.4f}s".format(time.time() - t),
+        )
+
+    print("Optimization Finished!")
+    print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
+
+    # torch.save(model.state_dict(), "../models/gcn_3layer_{}".format(args.dataset) + ".pt")
+    y_pred = _test(model, features, labels, norm_adj, idx_test)
+    print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
+    print(
+        "y_pred_orig counts: {}".format(np.unique(y_pred.numpy(), return_counts=True))
+    )
+    print("Finished training!")
+
+
+def _test(model, features, labels, norm_adj, idx_test):
+    # modalità di evaluation
+    model.eval()
+    output = model(features, norm_adj)
+    loss_test = F.nll_loss(output[idx_test], labels[idx_test])
+    y_pred = torch.argmax(output, dim=1)
+    acc_test = accuracy(y_pred[idx_test], labels[idx_test])
+    print(
+        "Test set results:",
+        "loss= {:.4f}".format(loss_test.item()),
+        "accuracy= {:.4f}".format(acc_test),
+    )
+    return y_pred
