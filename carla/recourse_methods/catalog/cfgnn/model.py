@@ -7,6 +7,8 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
 
+from carla.data.catalog.graph_catalog import AMLtoGraph
+
 # from carla.data.api import Data
 from carla.data.catalog.online_catalog import DataCatalog
 
@@ -16,11 +18,6 @@ from carla.models.catalog.GNN_TORCH.model_gnn import GCNSynthetic
 from carla.recourse_methods.api import RecourseMethod
 from carla.recourse_methods.processing import merge_default_parameters
 
-from .library.data_conversion import (
-    add_identifier,
-    construct_GraphData,
-    create_adj_matrix,
-)
 from .library.gcn_perturb import GCNSyntheticPerturb
 from .library.utils import get_degree_matrix, get_neighbourhood, normalize_adj
 
@@ -226,33 +223,14 @@ class CFExplainer(RecourseMethod):
         return (cf_stats, loss_total.item())
 
     def get_counterfactuals(self, factuals: pd.DataFrame):
-        # factuals = predict_negative_instances(model, data.df) DA VEDERE
-        # get preprocessed data of test set
-        df_test = self._mlmodel.data.df_test
-        x_test = df_test[list(set(df_test.columns) - {self.data.target})]
-        y_test = df_test[self.data.target]
-        x_test = self._mlmodel.get_ordered_features(x_test)
-
-        # get graph data
-        x_testID = add_identifier(x_test)
-        y_testID = add_identifier(y_test)
-        merged_df = pd.merge(x_testID, y_testID, on="ID")
-
-        # get a list of features and labels
-        list_feat = x_test.columns.tolist()
-        list_lab = y_test.columns.tolist()
-        conn = ""  # da definire come parametro
-        # diz_conn da vedere
-        data_graph, values_edges, diz_conn = construct_GraphData(
-            merged_df, list_feat, list_lab, conn
-        )
-
-        # define
-        adj = create_adj_matrix(
-            data_graph, values_edges
+        # Construct df_test by factuals
+        df_test = AMLtoGraph(factuals)
+        data_graph = df_test.construct_GraphData()
+        adj = df_test.create_adj_matrix(
+            data_graph
         ).squeeze()  # Does not include self loops
         features = torch.tensor(data_graph.x).squeeze()
-        labels = torch.tensor([list(elem).index(1) for elem in data_graph.y]).squeeze()
+        labels = torch.tensor(data_graph.y).squeeze()
         # idx_train  # non dovrebbe servire
 
         node_idx = [i for i in range(0, len(data_graph.y))]
@@ -262,7 +240,7 @@ class CFExplainer(RecourseMethod):
         norm_edge_index = dense_to_sparse(adj)  # Needed for pytorch-geo functions
         norm_adj = normalize_adj(adj)  # According to reparam trick from GCN paper
 
-        # output of GCN model
+        # output of GCN Syntethic model
         output = self.mlmodel.predict_proba(features, norm_adj)
         y_pred_orig = torch.argmax(output, dim=1)
 
@@ -271,6 +249,7 @@ class CFExplainer(RecourseMethod):
         # start = time.time()
         for i in idx_test[:]:
             # funzione get_neighbourhood da vedere su utils.py
+            # vedere se modificare get_neighbourhood per norm_edge_index
             sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(
                 int(i), norm_edge_index, self.n_layers + 1, features, labels
             )

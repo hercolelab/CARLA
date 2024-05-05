@@ -5,12 +5,13 @@ import pandas as pd
 import tensorflow as tf
 import torch
 
+# from carla.data.catalog.graph_catalog import DataCatalog
 from carla.data.catalog.online_catalog import DataCatalog, OnlineCatalog
 from carla.data.load_catalog import load
 from carla.models.api import MLModel
 
 from .load_model import load_online_model, load_trained_model, save_model
-from .train_model import train_model
+from .train_model import train_model, train_model_gnn
 
 
 class MLModelCatalog(MLModel):
@@ -357,33 +358,45 @@ class MLModelCatalog(MLModel):
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
-            # get preprocessed data --> DATAFRAME
-            df_train = self.data.df_train
-            df_test = self.data.df_test
+            if self.model_type == "gnn":
+                self._model = train_model_gnn(
+                    self,
+                    data=self.data,
+                    lr=learning_rate,
+                    weight_decay=0.001,
+                    epochs=epochs,
+                    clip=2.0,
+                    hidden_size=hidden_size,
+                )
 
-            x_train = df_train[list(set(df_train.columns) - {self.data.target})]
-            y_train = df_train[self.data.target]
-            x_test = df_test[list(set(df_test.columns) - {self.data.target})]
-            y_test = df_test[self.data.target]
+            else:
+                # get preprocessed data --> DATAFRAME
+                df_train = self.data.df_train
+                df_test = self.data.df_test
 
-            # order data (column-wise) before training
-            # tutto in DataFrame
-            x_train = self.get_ordered_features(x_train)
-            x_test = self.get_ordered_features(x_test)
+                x_train = df_train[list(set(df_train.columns) - {self.data.target})]
+                y_train = df_train[self.data.target]
+                x_test = df_test[list(set(df_test.columns) - {self.data.target})]
+                y_test = df_test[self.data.target]
 
-            self._model = train_model(
-                self,
-                x_train,
-                y_train,
-                x_test,
-                y_test,
-                learning_rate,
-                epochs,
-                batch_size,
-                hidden_size,
-                n_estimators,
-                max_depth,
-            )
+                # order data (column-wise) before training
+                # tutto in DataFrame
+                x_train = self.get_ordered_features(x_train)
+                x_test = self.get_ordered_features(x_test)
+
+                self._model = train_model(
+                    self,
+                    x_train,
+                    y_train,
+                    x_test,
+                    y_test,
+                    learning_rate,
+                    epochs,
+                    batch_size,
+                    hidden_size,
+                    n_estimators,
+                    max_depth,
+                )
 
             save_model(
                 model=self._model,

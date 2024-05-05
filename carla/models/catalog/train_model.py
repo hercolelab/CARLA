@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 # from torch_geometric.utils import dense_to_sparse
 from torch_geometric.utils.metric import accuracy
 
+from carla.data.catalog.graph_catalog import AMLtoGraph
 from carla.models.catalog.ANN_TF import AnnModel
 from carla.models.catalog.ANN_TF import AnnModel as ann_tf
 from carla.models.catalog.ANN_TORCH import AnnModel as ann_torch
@@ -23,12 +24,7 @@ from carla.models.catalog.Linear_TF import LinearModel as linear_tf
 from carla.models.catalog.Linear_TORCH import LinearModel as linear_torch
 
 # new import
-from carla.models.catalog.parse_gnn import (
-    add_identifier,
-    construct_GraphData,
-    create_adj_matrix,
-    normalize_adj,
-)
+from carla.models.catalog.parse_gnn import normalize_adj
 
 
 def train_model(
@@ -108,32 +104,11 @@ def train_model(
         return model.model
 
     # PYTORCH
-    # qua da mettere GNN
     elif catalog_model.backend == "pytorch":
-
-        # aggiungere su mlmmodel_catalog.yaml "gnn"
-        # fare il branch solo se è un DatFrame e non quando è un Graph
-        if catalog_model.model_type == "gnn":
-            # construct graph data
-            x_trainID = add_identifier(x_train)
-            y_trainID = add_identifier(y_train)
-            merged_df = pd.merge(x_trainID, y_trainID, on="ID")
-
-            list_feat = x_train.columns.tolist()
-            list_lab = y_train.columns.tolist()
-            conn = ""  # da definire come parametro
-            # diz_conn da vedere
-            data_graph, values_edges, diz_conn = construct_GraphData(
-                merged_df, list_feat, list_lab, conn
-            )
-
-        else:  # linear and ann
-            train_dataset = DataFrameDataset(x_train, y_train)
-            train_loader = DataLoader(
-                train_dataset, batch_size=batch_size, shuffle=True
-            )
-            test_dataset = DataFrameDataset(x_test, y_test)
-            test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+        train_dataset = DataFrameDataset(x_train, y_train)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_dataset = DataFrameDataset(x_test, y_test)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
         # aggiungere GNN
         if catalog_model.model_type == "linear":
@@ -147,44 +122,18 @@ def train_model(
                 num_of_classes=len(pd.unique(y_train)),
             )
 
-        # aggiungere su mlmmodel_catalog.yaml "gnn"
-        elif catalog_model.model_type == "gnn":
-            # initialize the model
-            model = gnn_torch(
-                nfeat=len(data_graph.x[0]),
-                nhid=20,  # da parametrizzare
-                nout=20,  # da parametrizzare
-                nclass=len(data_graph.y[0]),
-                dropout=0.0,
-            )
-
         else:
             raise ValueError(
                 f"model type not recognized for backend {catalog_model.backend}"
             )
-        # DA RIVEDERE PER GNN
 
-        # training per gnn
-        if catalog_model.model_type == "gnn":
-            _training_gnn_torch(
-                model=model,
-                data_graph=data_graph,
-                values_edges=values_edges,
-                learn_rate=0.001,
-                weight_decay=0.001,
-                epochs=epochs,
-                clip=2.0,
-            )
-
-        # il training per ann e linear
-        else:
-            _training_torch(
-                model,
-                train_loader,
-                test_loader,
-                learning_rate,
-                epochs,
-            )
+        _training_torch(
+            model,
+            train_loader,
+            test_loader,
+            learning_rate,
+            epochs,
+        )
 
         return model
 
@@ -250,6 +199,8 @@ class DataFrameDataset(Dataset):
 
 
 # %%-------------------------------------------------------
+
+
 def _training_torch(
     model,
     train_loader,
@@ -316,19 +267,60 @@ def _training_torch(
 
 
 # %%-------------------------------------------------------
-def _training_gnn_torch(
-    model, data_graph, values_edges, learn_rate, weight_decay, epochs, clip
+# -------------------------------------------------------  TRAINING GNN
+
+
+def train_model_gnn(
+    catalog_model,
+    data: pd.DataFrame,
+    lr: float,
+    weight_decay: float,
+    epochs: int,
+    clip: float,
+    hidden_size: int,
 ):
+    if catalog_model.backend == "pytorch":
+        # initialize dataframe
+        df = AMLtoGraph(data_table=data)
+        # create datagraph with type Data
+        datagraph = df.construct_GraphData()
+
+        # create adj matrix by COO
+        adj_matrix = df.create_adj_matrix(datagraph).squeeze()
+        # initialize the model
+        model = gnn_torch(
+            nfeat=len(datagraph.x[0]),
+            nhid=hidden_size,  # da parametrizzare
+            nout=hidden_size,  # da parametrizzare
+            nclass=len(datagraph.y[0]),
+            dropout=0.0,
+        )
+
+        # training gnn
+        _training_gnn_torch(
+            model=model,
+            data_graph=datagraph,
+            adj=adj_matrix,
+            learn_rate=lr,
+            weight_decay=weight_decay,
+            epochs=epochs,
+            clip=clip,
+        )
+
+        return model
+
+    else:
+        raise ValueError("model backend not recognized")
+
+
+def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs, clip):
     # use GPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
-    # create adj matrix by COO and normalize it
-    adj = create_adj_matrix(data_graph, values_edges).squeeze()
-    # norm_edge_index = dense_to_sparse(adj) # da vedere
     norm_adj = normalize_adj(adj)
     features = torch.tensor(data_graph.x).squeeze()
-    labels = torch.tensor([list(elem).index(1) for elem in data_graph.y]).squeeze()
+    labels = torch.tensor(data_graph.y).squeeze()
 
     node_idx = [i for i in range(0, len(data_graph.y))]
     idx_train = torch.masked_select(torch.Tensor(node_idx), data_graph.train_mask)
@@ -391,3 +383,6 @@ def _test(model, features, labels, norm_adj, idx_test):
         "accuracy= {:.4f}".format(acc_test),
     )
     return y_pred
+
+
+# %%
