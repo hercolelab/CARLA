@@ -55,6 +55,7 @@ class AMLtoGraph(DataCatalog):
         self._data_table = data_table
 
         # preso da Online Catalog
+        # aggiungere in data_catalog.yaml AML
         catalog_content = ["continuous", "categorical", "immutable", "target"]
         self.catalog: Dict[str, Any] = load(  # type: ignore
             "data_catalog.yaml", "AML", catalog_content
