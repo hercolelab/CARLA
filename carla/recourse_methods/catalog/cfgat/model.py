@@ -14,15 +14,15 @@ from carla.data.catalog.online_catalog import DataCatalog
 
 # from carla.models.api import MLModel
 # commento
-from carla.models.catalog.GNN_TORCH.model_gnn import GCNSynthetic
+from carla.models.catalog.GAT_TORCH.model_gat import GAT
 from carla.recourse_methods.api import RecourseMethod
 from carla.recourse_methods.processing import merge_default_parameters
 
-from .library.gcn_perturb import GCNSyntheticPerturb
+from .library.gat_perturb import GATSyntheticPerturb
 from .library.utils import get_degree_matrix, get_neighbourhood, normalize_adj
 
 
-class CFExplainer(RecourseMethod):
+class CFGATExplainer(RecourseMethod):
     """
     Code adapted from: CF-GNNExplainer: Counterfactual Explanations for Graph Neural Networks
     Link ArXiv: https://arxiv.org/abs/2102.03322
@@ -57,7 +57,9 @@ class CFExplainer(RecourseMethod):
         "num_epochs": 100,
         "n_hid": 3,
         "dropout": 0.0,
+        "alpha": 0.2,
         "beta": 0.5,
+        "nheads": 8,
         "num_classes": 2,
         "n_layers": 3,
         "n_momentum": 0,
@@ -65,9 +67,7 @@ class CFExplainer(RecourseMethod):
         "device": "cpu",
     }
 
-    def __init__(
-        self, mlmodel: GCNSynthetic, data: DataCatalog, hyperparams: Dict = None
-    ):
+    def __init__(self, mlmodel: GAT, data: DataCatalog, hyperparams: Dict = None):
 
         supported_backends = ["pytorch"]
         if mlmodel.backend not in supported_backends:
@@ -75,7 +75,7 @@ class CFExplainer(RecourseMethod):
                 f"{mlmodel.backend} is not in supported backends {supported_backends}"
             )
 
-        super(CFExplainer, self).__init__(mlmodel=mlmodel)
+        super(CFGATExplainer, self).__init__(mlmodel=mlmodel)
         self.data = data
         self.mlmodel = mlmodel
         self._params = merge_default_parameters(hyperparams, self._DEFAULT_HYPERPARAMS)
@@ -86,11 +86,13 @@ class CFExplainer(RecourseMethod):
         self.n_hid = self._params["n_hid"]
         self.dropout = self._params["n_search_samples"]
         self.beta = self._params["beta"]
+        self.alpha = self._params["alpha"]
         self.num_classes = self._params["num_classes"]
         self.n_layers = self._params["n_layers"]
         self.n_momentum = self._params["n_momentum"]
         self.verbose = self._params["verbose"]
         self.device = self._params["cpu"]
+        self.nheads = self._params["nheads"]
 
     def explain(
         self,
@@ -264,14 +266,15 @@ class CFExplainer(RecourseMethod):
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
             # and train the perturbation matrix to change the prediction
-            self.cf_model = GCNSyntheticPerturb(
+            self.cf_model = GATSyntheticPerturb(
                 nfeat=self.sub_feat.shape[1],
                 nhid=self.n_hid,
-                nout=self.n_hid,
                 nclass=self.num_classes,
                 adj=self.sub_adj,
                 dropout=self.dropout,
                 beta=self.beta,
+                alpha=self.alpha,
+                nheads=self.nheads,
             )
 
             self.cf_model.load_state_dict(
@@ -280,7 +283,13 @@ class CFExplainer(RecourseMethod):
 
             # Freeze weights from original model in cf_model
             for name, param in self.cf_model.named_parameters():
-                if name.endswith("weight") or name.endswith("bias"):
+                if (
+                    name.endswith("weight")
+                    or name.endswith("bias")
+                    or name.endswith("bias")
+                    or ("attention" in name)
+                    or ("out_att" in name)
+                ):
                     param.requires_grad = False
 
             if self.verbose:

@@ -358,7 +358,7 @@ class MLModelCatalog(MLModel):
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
-            if self.model_type == "gnn":
+            if self.model_type == "gnn" or self.model_type == "gat":
                 self._model = train_model_gnn(
                     self,
                     data=self.data,

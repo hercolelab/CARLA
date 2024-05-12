@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from sklearn import preprocessing
 from torch_geometric.data import Data
+from torch_geometric.utils import dense_to_sparse
 
 from carla.data.load_catalog import load
 
@@ -166,7 +167,8 @@ class AMLtoGraph(DataCatalog):
             dim=0,
         )
 
-        df = df.drop(["Is Laundering", "From", "To"], axis=1)
+        # df = df.drop(["Is Laundering", "From", "To"], axis=1)
+        df = df.drop(["Is Laundering"], axis=1)
 
         edge_attr = torch.from_numpy(df.values).to(torch.float)
         return edge_attr, edge_index
@@ -236,3 +238,106 @@ class AMLtoGraph(DataCatalog):
         )
         adj_matrix = sparse_matrix.to_dense()
         return adj_matrix
+
+    def get_feat_node(dataGraph, norm_edge_index, node_dict):
+        done = []
+        array_data = []
+        for i, arr in enumerate(norm_edge_index[0]):
+            for j, elem in enumerate(arr):
+                if int(elem) not in done:
+                    for key, value in node_dict.items():
+                        if value == int(elem):
+                            array_data.append([key] + list(dataGraph.x[key].numpy()))
+                            done.append(int(elem))
+                            break
+        return array_data
+
+    def get_feat_edges(dataGraph, norm_edge_index, node_dict):
+        # create a new edge index with original coordinate
+        new_edge_index = []
+        for i, arr in enumerate(norm_edge_index[0]):
+            col = []
+            for j, elem in enumerate(arr):
+                for key, value in node_dict.items():
+                    if value == int(elem):
+                        col.append(key)
+                        break
+            new_edge_index.append(col)
+        tensor_new_edge_index = torch.tensor(new_edge_index)
+        # print(tensor_new_edge_index[0])
+
+        # get edge_index and edge_attr
+        orig_edge_index = dataGraph.edge_index  # tensor
+        orig_edge_attr = dataGraph.edge_attr  # numpy array
+
+        # create list with indexes to find edge_attr
+        index_corr = []
+        for i in range(len(tensor_new_edge_index[0])):
+            # print(tensor[:,i])
+            for j in range(len(orig_edge_index[0])):
+                if list(tensor_new_edge_index[:, i]) == list(orig_edge_index[:, j]):
+                    index_corr.append(j)
+                    break
+
+        array_attr_edge = []
+        for i in index_corr:
+            array_attr_edge.append(list(orig_edge_attr[i].numpy()))
+
+        return array_attr_edge
+
+    def reconstruct_Tabular(self, dataGraph, adj_matrix, node_dict):
+        columns_name_node = [
+            "Account",
+            "Bank",
+            "avg paid 0",
+            "avg paid 1",
+            "avg paid 2",
+            "avg paid 3",
+            "avg paid 4",
+            "avg paid 5",
+            "avg paid 6",
+            "avg paid 7",
+            "avg paid 8",
+            "avg paid 9",
+            "avg paid 10",
+            "avg paid 11",
+            "avg paid 12",
+            "avg paid 13",
+            "avg paid 14",
+            "avg received 0",
+            "avg received 1",
+            "avg received 2",
+            "avg received 3",
+            "avg received 4",
+            "avg received 5",
+            "avg received 6",
+            "avg received 7",
+            "avg received 8",
+            "avg received 9",
+            "avg received 10",
+            "avg received 11",
+            "avg received 12",
+            "avg received 13",
+            "avg received 14",
+        ]
+        columns_name_edge = [
+            "Timestamp",
+            "Amount Received",
+            "Receiving Currency",
+            "Amount Paid",
+            "Payment Currency",
+            "Payment Format",
+            "Account",
+            "Account 1",
+        ]
+        norm_edge_index = dense_to_sparse(adj_matrix)
+
+        array_feat_node = self.get_feat_node(dataGraph, norm_edge_index, node_dict)
+        df1 = pd.DataFrame(array_feat_node, columns=columns_name_node)
+
+        array_feat_edge = self.get_feat_edges(dataGraph, norm_edge_index, node_dict)
+        df2 = pd.DataFrame(array_feat_edge, columns=columns_name_edge)
+        # df = pd.DataFrame(array_data, columns=columns_name)
+
+        result = pd.merge(df1, df2, left_on="Account", right_on="Account")
+        return result

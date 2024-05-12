@@ -18,6 +18,7 @@ from carla.data.catalog.graph_catalog import AMLtoGraph
 from carla.models.catalog.ANN_TF import AnnModel
 from carla.models.catalog.ANN_TF import AnnModel as ann_tf
 from carla.models.catalog.ANN_TORCH import AnnModel as ann_torch
+from carla.models.catalog.GAT_TORCH import GAT as gat_torch
 from carla.models.catalog.GNN_TORCH import GCNSynthetic as gnn_torch
 from carla.models.catalog.Linear_TF import LinearModel
 from carla.models.catalog.Linear_TF import LinearModel as linear_tf
@@ -288,13 +289,24 @@ def train_model_gnn(
         # create adj matrix by COO
         adj_matrix = df.create_adj_matrix(datagraph).squeeze()
         # initialize the model
-        model = gnn_torch(
-            nfeat=len(datagraph.x[0]),
-            nhid=hidden_size,  # da parametrizzare
-            nout=hidden_size,  # da parametrizzare
-            nclass=len(datagraph.y[0]),
-            dropout=0.0,
-        )
+        if catalog_model.model_type == "gnn":
+            model = gnn_torch(
+                nfeat=len(datagraph.x[0]),
+                nhid=hidden_size,  # da parametrizzare
+                nout=hidden_size,  # da parametrizzare
+                nclass=len(datagraph.y[0].unique()),
+                dropout=0.0,
+            )
+        # per ora è la GAT
+        else:
+            model = gat_torch(
+                nfeat=len(datagraph.x[0]),
+                nhid=hidden_size,  # da parametrizzare
+                nclass=len(datagraph.y[0].unique()),
+                dropout=0.0,
+                alpha=0.2,
+                nheads=8,
+            )
 
         # training gnn
         _training_gnn_torch(
