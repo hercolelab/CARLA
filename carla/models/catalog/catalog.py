@@ -283,6 +283,30 @@ class MLModelCatalog(MLModel):
                 'Incorrect backend value. Please use only "pytorch" or "tensorflow".'
             )
 
+    # The predict_proba method outputs
+    # the prediction as class probabilities
+    def predict_proba_gnn(self, x, adj):
+        return self._mymodel(x, adj)
+
+    def predict_gnn(self, x, adj):
+        """
+        One-dimensional prediction of ml model for an output interval of [0, 1].
+
+        Shape of input dimension has to be always two-dimensional (e.g., (1, m), (n, m))
+
+        Parameters
+        ----------
+        x : np.Array or pd.DataFrame
+            Tabular data of shape N x M (N number of instances, M number of features)
+
+        Returns
+        -------
+        iterable object
+            Ml model prediction for interval [0, 1] with shape N x 1
+        """
+
+        return torch.argmax(self._mymodel(x, adj), dim=1)
+
     @property
     def tree_iterator(self):
         """
@@ -366,7 +390,7 @@ class MLModelCatalog(MLModel):
                     weight_decay=0.001,
                     epochs=epochs,
                     clip=2.0,
-                    hidden_size=hidden_size,
+                    hidden_size=30,
                 )
 
             else:

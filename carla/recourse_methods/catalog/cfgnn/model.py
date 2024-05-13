@@ -11,10 +11,10 @@ from carla.data.catalog.graph_catalog import AMLtoGraph
 
 # from carla.data.api import Data
 from carla.data.catalog.online_catalog import DataCatalog
+from carla.models.catalog.catalog import MLModelCatalog
 
-# from carla.models.api import MLModel
 # commento
-from carla.models.catalog.GNN_TORCH.model_gnn import GCNSynthetic
+# from carla.models.catalog.GNN_TORCH.model_gnn import GCNSynthetic
 from carla.recourse_methods.api import RecourseMethod
 from carla.recourse_methods.processing import merge_default_parameters
 
@@ -66,7 +66,7 @@ class CFExplainer(RecourseMethod):
     }
 
     def __init__(
-        self, mlmodel: GCNSynthetic, data: DataCatalog, hyperparams: Dict = None
+        self, mlmodel: MLModelCatalog, data: DataCatalog, hyperparams: Dict = None
     ):
 
         supported_backends = ["pytorch"]
@@ -241,7 +241,7 @@ class CFExplainer(RecourseMethod):
         norm_adj = normalize_adj(adj)  # According to reparam trick from GCN paper
 
         # output of GCN Syntethic model
-        output = self.mlmodel.predict_proba(features, norm_adj)
+        output = self.mlmodel.predict_gnn(features, norm_adj)
         y_pred_orig = torch.argmax(output, dim=1)
 
         # Get CF examples in test set
@@ -301,7 +301,7 @@ class CFExplainer(RecourseMethod):
                 with torch.no_grad():
                     print(f"Output original model, full adj: {output[i]}")
                     print(
-                        f"Output original model, sub adj: {self.mlmodel.predict_proba(sub_feat, normalize_adj(sub_adj))[new_idx]}"
+                        f"Output original model, sub adj: {self.mlmodel.predict_proba_gnn(sub_feat, normalize_adj(sub_adj))[new_idx]}"
                     )
 
             # If cuda is avaialble move the computation on GPU
