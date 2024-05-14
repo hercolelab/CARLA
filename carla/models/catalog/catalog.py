@@ -371,6 +371,8 @@ class MLModelCatalog(MLModel):
             save_name = f"{self.model_type}_layers_{layer_string}"
         elif self.model_type == "gnn":
             save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gat":
+            save_name = f"{self.model_type}_layers_{layer_string}"
 
         else:
             raise NotImplementedError("Model type not supported:", self.model_type)
@@ -384,7 +386,7 @@ class MLModelCatalog(MLModel):
 
             # sanity check to see if loaded model accuracy makes sense
             if self._model is not None:
-                if not self._model_type == "gnn":
+                if not (self._model_type == "gnn" or self._model_type == "gat"):
                     self._test_accuracy()
 
         # if model loading failed or force_train flag set to true.

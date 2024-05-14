@@ -16,7 +16,7 @@ ml_model = MLModelCatalog(
 
 training_params = {
     "lr": 0.002,
-    "epochs": 10,
+    "epochs": 200,
     "batch_size": 1024,
     "hidden_size": [18, 9, 3],
 }
@@ -34,7 +34,7 @@ def data_testing(path):
     dataset = pd.read_csv(path)
 
     percentuale_training = 0.005
-    idx = [i for i in range(int(len(dataset)*0.001))]
+    idx = [i for i in range(int(len(dataset)*0.003))]
     test_set = dataset.iloc[idx]
     #test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set

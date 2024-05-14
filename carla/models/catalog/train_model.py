@@ -348,6 +348,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learn_rate, weight_decay=weight_decay
     )
+    
 
     t_total = time.time()
     for epoch in range(epochs):

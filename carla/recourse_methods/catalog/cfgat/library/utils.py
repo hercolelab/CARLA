@@ -73,8 +73,9 @@ def get_neighbourhood(node_idx: int, edge_index, n_hops, features, labels):
 
 
 def create_symm_matrix_from_vec(vector, n_rows):
-    matrix = torch.zeros(n_rows, n_rows)
-    idx = torch.tril_indices(n_rows, n_rows)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    matrix = torch.zeros(n_rows, n_rows, device=device)
+    idx = torch.tril_indices(n_rows, n_rows, device=device)
     matrix[idx[0], idx[1]] = vector
     symm_matrix = torch.tril(matrix) + torch.tril(matrix, -1).t()
     return symm_matrix
@@ -90,6 +91,22 @@ def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.bool, device=index.device)
     mask[index] = 1
     return mask
+
+
+def get_S_values(pickled_results, header):
+    df_prep = []
+    for example in pickled_results:
+        if example != []:
+            df_prep.append(example[0])
+    return pd.DataFrame(df_prep, columns=header)
+
+
+def redo_dataset_pgexplainer_format(dataset, train_idx, test_idx):
+
+    dataset.data.train_mask = index_to_mask(train_idx, size=dataset.data.num_nodes)
+    dataset.data.test_mask = index_to_mask(
+        test_idx[len(test_idx)], size=dataset.data.num_nodes
+    )
 
 
 def get_S_values(pickled_results, header):

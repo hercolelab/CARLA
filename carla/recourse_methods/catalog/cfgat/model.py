@@ -84,14 +84,14 @@ class CFGATExplainer(RecourseMethod):
         self.lr = self._params["lr"]
         self.num_epochs = self._params["num_epochs"]
         self.n_hid = self._params["n_hid"]
-        self.dropout = self._params["n_search_samples"]
+        self.dropout = self._params["dropout"]
         self.beta = self._params["beta"]
         self.alpha = self._params["alpha"]
         self.num_classes = self._params["num_classes"]
         self.n_layers = self._params["n_layers"]
         self.n_momentum = self._params["n_momentum"]
         self.verbose = self._params["verbose"]
-        self.device = self._params["cpu"]
+        self.device = self._params["device"]
         self.nheads = self._params["nheads"]
 
     def explain(
@@ -169,7 +169,7 @@ class CFGATExplainer(RecourseMethod):
 
         # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
         # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
-        output = self.cf_model.forward(self.x, self.A_x)
+        output = self.cf_model.forward(self.x, self.A_x.to(self.device))
         output_actual, self.P = self.cf_model.forward_prediction(self.x)
 
         # Need to use new_idx from now on since sub_adj is reindexed
@@ -231,8 +231,8 @@ class CFGATExplainer(RecourseMethod):
         adj = df_test.create_adj_matrix(
             data_graph
         ).squeeze()  # Does not include self loops
-        features = torch.tensor(data_graph.x).squeeze()
-        labels = torch.tensor(data_graph.y).squeeze()
+        features = torch.tensor(data_graph.x).squeeze().to(self.device)
+        labels = torch.tensor(data_graph.y).squeeze().to(self.device)
         # idx_train  # non dovrebbe servire
 
         node_idx = [i for i in range(0, len(data_graph.y))]
@@ -240,11 +240,11 @@ class CFGATExplainer(RecourseMethod):
         idx_test = idx_test.type(torch.int64)
 
         norm_edge_index = dense_to_sparse(adj)  # Needed for pytorch-geo functions
-        norm_adj = normalize_adj(adj)  # According to reparam trick from GCN paper
+        norm_adj = normalize_adj(adj).to(self.device)  # According to reparam trick from GCN paper
 
         # output of GCN Syntethic model
-        output = self.mlmodel.predict_proba(features, norm_adj)
-        y_pred_orig = torch.argmax(output, dim=1)
+        y_pred_orig = self.mlmodel.predict_proba(features, norm_adj)
+        # y_pred_orig = torch.argmax(output, dim=1)
 
         # Get CF examples in test set
         test_cf_examples = []
@@ -257,9 +257,12 @@ class CFGATExplainer(RecourseMethod):
                 int(i), norm_edge_index, self.n_layers + 1, features, labels
             )
             new_idx = node_dict[int(i)]
-
+            
+            if len(sub_adj.shape) < 1 or all([True if i == 0 else False for i in sub_adj.shape]):
+                continue 
+            
             self.sub_adj = sub_adj
-            self.sub_feat = sub_feat
+            self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
             self.y_pred_orig = y_pred_orig[new_idx]
 
@@ -301,16 +304,16 @@ class CFGATExplainer(RecourseMethod):
                 for name, param in self.cf_model.named_parameters():
                     print("cf model requires_grad: ", name, param.requires_grad)
 
-                print(f"y_true counts: {np.unique(labels.numpy(), return_counts=True)}")
+                print(f"y_true counts: {np.unique(labels.cpu().numpy(), return_counts=True)}")
                 print(
-                    f"y_pred_orig counts: {np.unique(y_pred_orig.numpy(), return_counts=True)}"
+                    f"y_pred_orig counts: {np.unique(y_pred_orig.cpu().numpy(), return_counts=True)}"
                 )  # Confirm model is actually doing something
 
                 # Check that original model gives same prediction on full graph and subgraph
                 with torch.no_grad():
-                    print(f"Output original model, full adj: {output[i]}")
+                    print(f"Output original model, full adj: {y_pred_orig[i]}")
                     print(
-                        f"Output original model, sub adj: {self.mlmodel.predict_proba(sub_feat, normalize_adj(sub_adj))[new_idx]}"
+                        f"Output original model, sub adj: {self.mlmodel.predict_proba(sub_feat, normalize_adj(sub_adj).to(self.device))[new_idx]}"
                     )
 
             # If cuda is avaialble move the computation on GPU
@@ -335,6 +338,8 @@ class CFGATExplainer(RecourseMethod):
                 num_epochs=self.num_epochs,
                 verbose=self.verbose,
             )
+            if len(cf_example) == 0:
+                continue
             one_cf_example = cf_example[0]
             test_cf_sts.append(one_cf_example)
 
@@ -365,7 +370,7 @@ class CFGATExplainer(RecourseMethod):
             ],
         )
 
-        path = "path da creare pensavo: /test/saved_sts_cf/results1"
+        path = "/test/saved_sts_cf/results1"
         df_cf_example.to_csv(path + ".csv")
         return test_cf_examples
 

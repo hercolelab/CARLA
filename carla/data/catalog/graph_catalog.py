@@ -141,19 +141,25 @@ class AMLtoGraph(DataCatalog):
         return df
 
     def paid_currency_aggregate(self, currency_ls, paying_df, accounts):
-        for i in currency_ls:
-            temp = paying_df[paying_df["Payment Currency"] == i]
-            accounts["avg paid " + str(i)] = (
+        for i in range(15):
+            try:
+                temp = paying_df[paying_df["Payment Currency"] == i]
+                accounts["avg paid " + str(i)] = (
                 temp["Amount Paid"].groupby(temp["Account"]).transform("mean")
-            )
+                )
+            except Exception:
+                accounts[f"avg paid {i}"] = 0.0
         return accounts
 
     def received_currency_aggregate(self, currency_ls, receiving_df, accounts):
-        for i in currency_ls:
-            temp = receiving_df[receiving_df["Receiving Currency"] == i]
-            accounts["avg received " + str(i)] = (
-                temp["Amount Received"].groupby(temp["Account"]).transform("mean")
-            )
+        for i in range(15):
+            try:
+                temp = receiving_df[receiving_df["Receiving Currency"] == i]
+                accounts["avg received " + str(i)] = (
+                    temp["Amount Received"].groupby(temp["Account"]).transform("mean")
+                )
+            except Exception:
+                accounts[f"avg received {i}"] = 0.0
         accounts = accounts.fillna(0)
         return accounts
 
@@ -208,7 +214,7 @@ class AMLtoGraph(DataCatalog):
         if isinstance(self._data_table, str):
             # csv path
             df = pd.read_csv(self._data_table)
-            df = df.iloc[:int(len(df)*0.001)]
+            df = df.iloc[:int(len(df)*0.003)]
         else:
             # dataframe
             df = self._data_table
