@@ -49,7 +49,7 @@ class GraphConvolution(nn.Module):
         )
 
 
-class GCNSynthetic(nn.Module, MLModel):
+class GCNSynthetic(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
     """
@@ -78,7 +78,7 @@ class GCNSynthetic(nn.Module, MLModel):
     # The predict_proba method outputs
     # the prediction as class probabilities
     def predict_proba(self, x, adj):
-        return self._mymodel(x, adj)
+        return self._model(x, adj)
 
     def predict(self, x, adj):
         """
@@ -97,4 +97,5 @@ class GCNSynthetic(nn.Module, MLModel):
             Ml model prediction for interval [0, 1] with shape N x 1
         """
 
-        return torch.argmax(self._mymodel(x, adj), dim=1)
+        return torch.argmax(self._model(x, adj), dim=1)
+     

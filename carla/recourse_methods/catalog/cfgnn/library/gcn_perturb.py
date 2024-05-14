@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gcn import GraphConvolution
+from .gcn import GraphConvolution
 from torch.nn.parameter import Parameter
-from utils import (
+from .utils import (
     create_symm_matrix_from_vec,
     create_vec_from_symm_matrix,
     get_degree_matrix,
@@ -121,7 +121,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def forward(self, x, sub_adj):
         """ """
-
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.sub_adj = sub_adj
 
         # Same as normalize_adj in utils.py except includes P_hat in A_tilde
@@ -138,7 +138,7 @@ class GCNSyntheticPerturb(nn.Module):
             )  # Use sigmoid to bound P_hat in [0,1]
         else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
             A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(
-                self.num_nodes
+                self.num_nodes, device=device
             )  # Use sigmoid to bound P_hat in [0,1]
 
         # D_tilde is the degree matrix
@@ -162,13 +162,13 @@ class GCNSyntheticPerturb(nn.Module):
         """ """
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.P = (F.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
 
         if self.edge_additions:
             A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj + torch.eye(self.num_nodes)
+            A_tilde = self.P * self.adj.to(device) + torch.eye(self.num_nodes, device=device)
 
         D_tilde = get_degree_matrix(A_tilde)
         # Raise to power -1/2, set all infs to 0s
@@ -189,6 +189,7 @@ class GCNSyntheticPerturb(nn.Module):
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         """ """
         pred_same = (y_pred_new_actual == y_pred_orig).float()
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # Need dim >=2 for F.nll_loss to work
         output = output.unsqueeze(0)
@@ -197,7 +198,7 @@ class GCNSyntheticPerturb(nn.Module):
         if self.edge_additions:
             cf_adj = self.P
         else:
-            cf_adj = self.P * self.adj
+            cf_adj = self.P * self.adj.to(device)
         cf_adj.requires_grad = (
             True  # Need to change this otherwise loss_graph_dist has no gradient
         )
@@ -205,7 +206,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = -F.nll_loss(output, y_pred_orig)
         loss_graph_dist = (
-            sum(sum(abs(cf_adj - self.adj))) / 2
+            sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)
 
         # Zero-out loss_pred with pred_same if prediction flips

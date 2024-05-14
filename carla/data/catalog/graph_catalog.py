@@ -54,17 +54,20 @@ class DataGraph(ABC):
 class AMLtoGraph(DataCatalog):
     def __init__(self, data_table: Union[str, pd.DataFrame]):
         self._data_table = data_table
+        self.name = 'AML'
 
         # preso da Online Catalog
         # aggiungere in data_catalog.yaml AML
         catalog_content = ["continuous", "categorical", "immutable", "target"]
         self.catalog: Dict[str, Any] = load(  # type: ignore
-            "data_catalog.yaml", "AML", catalog_content
+            "data_catalog.yaml", self.name, catalog_content
         )
 
         for key in ["continuous", "categorical", "immutable"]:
             if self.catalog[key] is None:
                 self.catalog[key] = []
+                
+        
 
     @property
     def categorical(self) -> List[str]:
@@ -194,10 +197,10 @@ class AMLtoGraph(DataCatalog):
         # list with all false
         all_false = [False for _ in range(0, num_nodes)]
         train_mask = torch.tensor(
-            self.change_false(all_false, 0, idx_split), dtype=torch.long
+            self.change_false(all_false, 0, idx_split), dtype=torch.bool
         )
         test_mask = torch.tensor(
-            self.change_false(all_false, idx_split, len(all_false)), dtype=torch.long
+            self.change_false(all_false, idx_split, len(all_false)), dtype=torch.bool
         )
         return train_mask, test_mask
 
@@ -205,6 +208,7 @@ class AMLtoGraph(DataCatalog):
         if isinstance(self._data_table, str):
             # csv path
             df = pd.read_csv(self._data_table)
+            df = df.iloc[:int(len(df)*0.001)]
         else:
             # dataframe
             df = self._data_table
@@ -216,6 +220,7 @@ class AMLtoGraph(DataCatalog):
         )
         edge_attr, edge_index = self.get_edge_df(accounts, df)
         train_mask, test_mask = self.create_mask(len(node_attr))
+        
 
         data = Data(
             x=node_attr,

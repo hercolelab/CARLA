@@ -7,6 +7,7 @@ import torch
 
 # from carla.data.catalog.graph_catalog import DataCatalog
 from carla.data.catalog.online_catalog import DataCatalog, OnlineCatalog
+from carla.data.catalog.graph_catalog import AMLtoGraph
 from carla.data.load_catalog import load
 from carla.models.api import MLModel
 
@@ -94,6 +95,8 @@ class MLModelCatalog(MLModel):
 
             self._catalog = catalog[model_type][self._backend]
             self._feature_input_order = self._catalog["feature_order"]
+        elif isinstance(data, AMLtoGraph):
+            pass
         else:
             if data._identity_encoding:
                 encoded_features = data.categorical
@@ -286,7 +289,7 @@ class MLModelCatalog(MLModel):
     # The predict_proba method outputs
     # the prediction as class probabilities
     def predict_proba_gnn(self, x, adj):
-        return self._mymodel(x, adj)
+        return self._model(x, adj)
 
     def predict_gnn(self, x, adj):
         """
@@ -305,7 +308,7 @@ class MLModelCatalog(MLModel):
             Ml model prediction for interval [0, 1] with shape N x 1
         """
 
-        return torch.argmax(self._mymodel(x, adj), dim=1)
+        return torch.argmax(self._model(x, adj), dim=1)
 
     @property
     def tree_iterator(self):
@@ -366,6 +369,9 @@ class MLModelCatalog(MLModel):
             save_name = f"{self.model_type}"
         elif self.model_type == "ann":
             save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gnn":
+            save_name = f"{self.model_type}_layers_{layer_string}"
+
         else:
             raise NotImplementedError("Model type not supported:", self.model_type)
 
@@ -378,7 +384,8 @@ class MLModelCatalog(MLModel):
 
             # sanity check to see if loaded model accuracy makes sense
             if self._model is not None:
-                self._test_accuracy()
+                if not self._model_type == "gnn":
+                    self._test_accuracy()
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
@@ -390,7 +397,7 @@ class MLModelCatalog(MLModel):
                     weight_decay=0.001,
                     epochs=epochs,
                     clip=2.0,
-                    hidden_size=30,
+                    hidden_size=31,
                 )
 
             else:

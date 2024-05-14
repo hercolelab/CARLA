@@ -12,7 +12,8 @@ from torch.nn.utils import clip_grad_norm
 from torch.utils.data import DataLoader, Dataset
 
 # from torch_geometric.utils import dense_to_sparse
-from torch_geometric.utils.metric import accuracy
+# from torch_geometric.utils.metric import accuracy
+from torcheval.metrics import MulticlassAccuracy
 
 from carla.data.catalog.graph_catalog import AMLtoGraph
 from carla.models.catalog.ANN_TF import AnnModel
@@ -282,19 +283,19 @@ def train_model_gnn(
 ):
     if catalog_model.backend == "pytorch":
         # initialize dataframe
-        df = AMLtoGraph(data_table=data)
+        #data = AMLtoGraph(data_table=data)
         # create datagraph with type Data
-        datagraph = df.construct_GraphData()
+        datagraph = data.construct_GraphData()
 
         # create adj matrix by COO
-        adj_matrix = df.create_adj_matrix(datagraph).squeeze()
+        adj_matrix = data.create_adj_matrix(datagraph).squeeze()
         # initialize the model
         if catalog_model.model_type == "gnn":
             model = gnn_torch(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
                 nout=hidden_size,  # da parametrizzare
-                nclass=len(datagraph.y[0].unique()),
+                nclass=2,
                 dropout=0.0,
             )
         # per ora è la GAT
@@ -302,7 +303,7 @@ def train_model_gnn(
             model = gat_torch(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
-                nclass=len(datagraph.y[0].unique()),
+                nclass=2,
                 dropout=0.0,
                 alpha=0.2,
                 nheads=8,
@@ -327,18 +328,21 @@ def train_model_gnn(
 
 def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs, clip):
     # use GPU
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
-    norm_adj = normalize_adj(adj)
-    features = torch.tensor(data_graph.x).squeeze()
-    labels = torch.tensor(data_graph.y).squeeze()
+    norm_adj = normalize_adj(adj).to(device)
+    features = torch.tensor(data_graph.x).squeeze().to(device)
+    labels = torch.tensor(data_graph.y, dtype=torch.long).squeeze().to(device)
 
     node_idx = [i for i in range(0, len(data_graph.y))]
     idx_train = torch.masked_select(torch.Tensor(node_idx), data_graph.train_mask)
     idx_test = torch.masked_select(torch.Tensor(node_idx), data_graph.test_mask)
     idx_train = idx_train.type(torch.int64)
     idx_test = idx_test.type(torch.int64)
+
+    metric = MulticlassAccuracy()
+
 
     # define optimizer
     optimizer = torch.optim.Adam(
@@ -349,7 +353,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
     for epoch in range(epochs):
         t = time.time()
         model.train()
-
+        features, norm_adj = features.to(device), norm_adj.to(device)
         optimizer.zero_grad()
         output = model(features, norm_adj)
 
@@ -357,16 +361,18 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
         y_pred = torch.argmax(output, dim=1)
 
-        acc_train = accuracy(y_pred[idx_train], labels[idx_train])
+        acc_train = metric.update(y_pred[idx_train], labels[idx_train])
 
         loss_train.backward()
+        
+        
 
         clip_grad_norm(model.parameters(), clip)
         optimizer.step()
         print(
             "Epoch: {:04d}".format(epoch + 1),
             "loss_train: {:.4f}".format(loss_train.item()),
-            "acc_train: {:.4f}".format(acc_train),
+            "acc_train: {:.4f}".format(acc_train.compute()),
             "time: {:.4f}s".format(time.time() - t),
         )
 
@@ -375,9 +381,9 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
     # torch.save(model.state_dict(), "../models/gcn_3layer_{}".format(args.dataset) + ".pt")
     y_pred = _test(model, features, labels, norm_adj, idx_test)
-    print("y_true counts: {}".format(np.unique(labels.numpy(), return_counts=True)))
+    print("y_true counts: {}".format(np.unique(labels.cpu().numpy(), return_counts=True)))
     print(
-        "y_pred_orig counts: {}".format(np.unique(y_pred.numpy(), return_counts=True))
+        "y_pred_orig counts: {}".format(np.unique(y_pred.cpu().numpy(), return_counts=True))
     )
     print("Finished training!")
 
@@ -385,14 +391,15 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 def _test(model, features, labels, norm_adj, idx_test):
     # modalità di evaluation
     model.eval()
+    metric = MulticlassAccuracy()
     output = model(features, norm_adj)
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
     y_pred = torch.argmax(output, dim=1)
-    acc_test = accuracy(y_pred[idx_test], labels[idx_test])
+    acc_test = metric.update(y_pred[idx_test], labels[idx_test])
     print(
         "Test set results:",
         "loss= {:.4f}".format(loss_test.item()),
-        "accuracy= {:.4f}".format(acc_test),
+        "accuracy= {:.4f}".format(acc_test.compute()),
     )
     return y_pred
 
