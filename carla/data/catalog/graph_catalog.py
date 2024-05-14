@@ -214,7 +214,7 @@ class AMLtoGraph(DataCatalog):
         if isinstance(self._data_table, str):
             # csv path
             df = pd.read_csv(self._data_table)
-            df = df.iloc[:int(len(df)*0.003)]
+            df = df.iloc[:int(len(df)*0.001)]
         else:
             # dataframe
             df = self._data_table

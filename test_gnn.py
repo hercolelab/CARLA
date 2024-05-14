@@ -11,7 +11,7 @@ dataset = AMLtoGraph(path_file)
 # Model
 
 ml_model = MLModelCatalog(
-    data=dataset, model_type="gnn", load_online=False, backend="pytorch"
+    data=dataset, model_type="gat", load_online=False, backend="pytorch"
 )
 
 training_params = {
@@ -34,7 +34,7 @@ def data_testing(path):
     dataset = pd.read_csv(path)
 
     percentuale_training = 0.005
-    idx = [i for i in range(int(len(dataset)*0.003))]
+    idx = [i for i in range(int(len(dataset)*0.001))]
     test_set = dataset.iloc[idx]
     #test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set
@@ -43,19 +43,36 @@ def data_testing(path):
 # Recourse Method
 
 test_factual = data_testing(path_file)
+# hyper = {
+#     "cf_optimizer": "Adadelta",
+#     "lr": 0.05,
+#     "num_epochs": 500,
+#     "n_hid": 31,
+#     "dropout": 0.0,
+#     "beta": 0.5,
+#     "num_classes": 2,
+#     "n_layers": 3,
+#     "n_momentum": 0,
+#     "verbose": True,
+#     "device": "cuda",
+# }
+
+
 hyper = {
-    "cf_optimizer": "Adadelta",
-    "lr": 0.05,
-    "num_epochs": 500,
-    "n_hid": 31,
-    "dropout": 0.0,
-    "beta": 0.5,
-    "num_classes": 2,
-    "n_layers": 3,
-    "n_momentum": 0,
-    "verbose": True,
-    "device": "cuda",
-}
+        "cf_optimizer": "Adadelta",
+        "lr": 0.05,
+        "num_epochs": 100,
+        "n_hid": 3,
+        "dropout": 0.0,
+        "alpha": 0.2,
+        "beta": 0.5,
+        "nheads": 8,
+        "num_classes": 2,
+        "n_layers": 3,
+        "n_momentum": 0,
+        "verbose": True,
+        "device": "cpu",
+    }
 
 recourse_method = recourse_catalog.CFExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper
