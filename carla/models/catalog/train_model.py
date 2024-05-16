@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 # from torch_geometric.utils.metric import accuracy
 from torcheval.metrics import MulticlassAccuracy
 
-from carla.data.catalog.graph_catalog import AMLtoGraph
+from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
 from carla.models.catalog.ANN_TF import AnnModel
 from carla.models.catalog.ANN_TF import AnnModel as ann_tf
 from carla.models.catalog.ANN_TORCH import AnnModel as ann_torch
@@ -283,9 +283,12 @@ def train_model_gnn(
 ):
     if catalog_model.backend == "pytorch":
         # initialize dataframe
-        #data = AMLtoGraph(data_table=data)
+        # data = AMLtoGraph(data_table=data)
         # create datagraph with type Data
-        datagraph = data.construct_GraphData()
+        if isinstance(data, AMLtoGraph):
+            datagraph = data.construct_GraphData()
+        elif isinstance(data, Planetoid):
+            datagraph = data.getDataGraph()
 
         # create adj matrix by COO
         adj_matrix = data.create_adj_matrix(datagraph).squeeze()
@@ -343,12 +346,10 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
     metric = MulticlassAccuracy()
 
-
     # define optimizer
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learn_rate, weight_decay=weight_decay
     )
-    
 
     t_total = time.time()
     for epoch in range(epochs):
@@ -365,8 +366,6 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
         acc_train = metric.update(y_pred[idx_train], labels[idx_train])
 
         loss_train.backward()
-        
-        
 
         clip_grad_norm(model.parameters(), clip)
         optimizer.step()
@@ -382,9 +381,13 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
     # torch.save(model.state_dict(), "../models/gcn_3layer_{}".format(args.dataset) + ".pt")
     y_pred = _test(model, features, labels, norm_adj, idx_test)
-    print("y_true counts: {}".format(np.unique(labels.cpu().numpy(), return_counts=True)))
     print(
-        "y_pred_orig counts: {}".format(np.unique(y_pred.cpu().numpy(), return_counts=True))
+        "y_true counts: {}".format(np.unique(labels.cpu().numpy(), return_counts=True))
+    )
+    print(
+        "y_pred_orig counts: {}".format(
+            np.unique(y_pred.cpu().numpy(), return_counts=True)
+        )
     )
     print("Finished training!")
 

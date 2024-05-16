@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from sklearn import preprocessing
 from torch_geometric.data import Data
+from torch_geometric.datasets import Planetoid
 from torch_geometric.utils import dense_to_sparse
 
 from carla.data.load_catalog import load
@@ -51,10 +52,15 @@ class DataGraph(ABC):
 """
 
 
-class AMLtoGraph(DataCatalog):
+class Platenoid(DataCatalog):
     def __init__(self, data_table: Union[str, pd.DataFrame]):
         self._data_table = data_table
-        self.name = 'AML'
+        if self._data_table == "Cora":
+            self.name = "Cora"
+        elif self._data_table == "CiteSeer":
+            self.name = "CiteSeer"
+        else:
+            self.name = "PubMed"
 
         # preso da Online Catalog
         # aggiungere in data_catalog.yaml AML
@@ -66,8 +72,64 @@ class AMLtoGraph(DataCatalog):
         for key in ["continuous", "categorical", "immutable"]:
             if self.catalog[key] is None:
                 self.catalog[key] = []
-                
-        
+
+    @property
+    def categorical(self) -> List[str]:
+        return self.catalog["categorical"]
+
+    @property
+    def continuous(self) -> List[str]:
+        return self.catalog["continuous"]
+
+    @property
+    def immutables(self) -> List[str]:
+        return self.catalog["immutable"]
+
+    @property
+    def target(self) -> str:
+        return self.catalog["target"]
+
+    def create_adj_matrix(self, data_graph):
+        edges_index = data_graph.edge_index
+        row_indices = edges_index[0]
+        col_indices = edges_index[1]
+        values = torch.ones(len(edges_index[0]))  # valori tutti a uno
+        size = torch.Size([len(data_graph.x), len(data_graph.x)])
+        sparse_matrix = torch.sparse_coo_tensor(
+            torch.stack([row_indices, col_indices]), values, size=size
+        )
+        adj_matrix = sparse_matrix.to_dense()
+        return adj_matrix
+
+    def getDataGraph(self):
+        if self.name == "Cora":
+            cora = Planetoid(root="data/Planetoid", name="Cora")
+            dataset = cora.data
+        if self.name == "CiteSeer":
+            citiseer = Planetoid(root="data/Planetoid", name="CiteSeer")
+            dataset = citiseer.data
+        else:
+            pubMed = Planetoid(root="data/Planetoid", name="PubMed")
+            dataset = pubMed.data
+
+        return dataset
+
+
+class AMLtoGraph(DataCatalog):
+    def __init__(self, data_table: Union[str, pd.DataFrame]):
+        self._data_table = data_table
+        self.name = "AML"
+
+        # preso da Online Catalog
+        # aggiungere in data_catalog.yaml AML
+        catalog_content = ["continuous", "categorical", "immutable", "target"]
+        self.catalog: Dict[str, Any] = load(  # type: ignore
+            "data_catalog.yaml", self.name, catalog_content
+        )
+
+        for key in ["continuous", "categorical", "immutable"]:
+            if self.catalog[key] is None:
+                self.catalog[key] = []
 
     @property
     def categorical(self) -> List[str]:
@@ -145,7 +207,7 @@ class AMLtoGraph(DataCatalog):
             try:
                 temp = paying_df[paying_df["Payment Currency"] == i]
                 accounts["avg paid " + str(i)] = (
-                temp["Amount Paid"].groupby(temp["Account"]).transform("mean")
+                    temp["Amount Paid"].groupby(temp["Account"]).transform("mean")
                 )
             except Exception:
                 accounts[f"avg paid {i}"] = 0.0
@@ -214,7 +276,7 @@ class AMLtoGraph(DataCatalog):
         if isinstance(self._data_table, str):
             # csv path
             df = pd.read_csv(self._data_table)
-            df = df.iloc[:int(len(df)*0.001)]
+            df = df.iloc[: int(len(df) * 0.001)]
         else:
             # dataframe
             df = self._data_table
@@ -226,7 +288,6 @@ class AMLtoGraph(DataCatalog):
         )
         edge_attr, edge_index = self.get_edge_df(accounts, df)
         train_mask, test_mask = self.create_mask(len(node_attr))
-        
 
         data = Data(
             x=node_attr,

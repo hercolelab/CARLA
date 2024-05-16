@@ -5,9 +5,10 @@ import pandas as pd
 import tensorflow as tf
 import torch
 
+from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
+
 # from carla.data.catalog.graph_catalog import DataCatalog
 from carla.data.catalog.online_catalog import DataCatalog, OnlineCatalog
-from carla.data.catalog.graph_catalog import AMLtoGraph
 from carla.data.load_catalog import load
 from carla.models.api import MLModel
 
@@ -96,6 +97,8 @@ class MLModelCatalog(MLModel):
             self._catalog = catalog[model_type][self._backend]
             self._feature_input_order = self._catalog["feature_order"]
         elif isinstance(data, AMLtoGraph):
+            pass
+        elif isinstance(data, Planetoid):
             pass
         else:
             if data._identity_encoding:
