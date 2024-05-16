@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
 
-from carla.data.catalog.graph_catalog import AMLtoGraph
+from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
 
 # from carla.data.api import Data
 from carla.data.catalog.online_catalog import DataCatalog
@@ -224,10 +224,17 @@ class CFGATExplainer(RecourseMethod):
 
         return (cf_stats, loss_total.item())
 
-    def get_counterfactuals(self, factuals: pd.DataFrame):
-        # Construct df_test by factuals
-        df_test = AMLtoGraph(factuals)
-        data_graph = df_test.construct_GraphData()
+    def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
+
+        plat = ["Cora", "CiteSeer", "PubMed"]
+        if factuals in plat:
+            df_test = Planetoid(factuals)
+            data_graph = df_test.getDataGraph()
+        else:
+            # Construct df_test by factuals
+            df_test = AMLtoGraph(factuals)
+            data_graph = df_test.construct_GraphData()
+
         adj = df_test.create_adj_matrix(
             data_graph
         ).squeeze()  # Does not include self loops
@@ -240,7 +247,9 @@ class CFGATExplainer(RecourseMethod):
         idx_test = idx_test.type(torch.int64)
 
         norm_edge_index = dense_to_sparse(adj)  # Needed for pytorch-geo functions
-        norm_adj = normalize_adj(adj).to(self.device)  # According to reparam trick from GCN paper
+        norm_adj = normalize_adj(adj).to(
+            self.device
+        )  # According to reparam trick from GCN paper
 
         # output of GCN Syntethic model
         y_pred_orig = self.mlmodel.predict_proba(features, norm_adj)
@@ -257,10 +266,12 @@ class CFGATExplainer(RecourseMethod):
                 int(i), norm_edge_index, self.n_layers + 1, features, labels
             )
             new_idx = node_dict[int(i)]
-            
-            if len(sub_adj.shape) < 1 or all([True if i == 0 else False for i in sub_adj.shape]):
-                continue 
-            
+
+            if len(sub_adj.shape) < 1 or all(
+                [True if i == 0 else False for i in sub_adj.shape]
+            ):
+                continue
+
             self.sub_adj = sub_adj
             self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
@@ -304,7 +315,9 @@ class CFGATExplainer(RecourseMethod):
                 for name, param in self.cf_model.named_parameters():
                     print("cf model requires_grad: ", name, param.requires_grad)
 
-                print(f"y_true counts: {np.unique(labels.cpu().numpy(), return_counts=True)}")
+                print(
+                    f"y_true counts: {np.unique(labels.cpu().numpy(), return_counts=True)}"
+                )
                 print(
                     f"y_pred_orig counts: {np.unique(y_pred_orig.cpu().numpy(), return_counts=True)}"
                 )  # Confirm model is actually doing something
