@@ -5,7 +5,7 @@ import pandas as pd
 import tensorflow as tf
 import torch
 
-from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
+from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
 # from carla.data.catalog.graph_catalog import DataCatalog
 from carla.data.catalog.online_catalog import DataCatalog, OnlineCatalog
@@ -70,6 +70,7 @@ class MLModelCatalog(MLModel):
         self._backend = backend
         self._continuous = data.continuous
         self._categorical = data.categorical
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         if self._backend == "pytorch":
             ext = "pt"
@@ -98,7 +99,7 @@ class MLModelCatalog(MLModel):
             self._feature_input_order = self._catalog["feature_order"]
         elif isinstance(data, AMLtoGraph):
             pass
-        elif isinstance(data, Planetoid):
+        elif isinstance(data, PlanetoidGraph):
             pass
         else:
             if data._identity_encoding:
@@ -292,7 +293,7 @@ class MLModelCatalog(MLModel):
     # The predict_proba method outputs
     # the prediction as class probabilities
     def predict_proba_gnn(self, x, adj):
-        return self._model(x, adj)
+        return self._model(x.to(self.device), adj.to(self.device))
 
     def predict_gnn(self, x, adj):
         """
@@ -311,7 +312,7 @@ class MLModelCatalog(MLModel):
             Ml model prediction for interval [0, 1] with shape N x 1
         """
 
-        return torch.argmax(self._model(x, adj), dim=1)
+        return torch.argmax(self._model(x.to(self.device), adj.to(self.device)), dim=1)
 
     @property
     def tree_iterator(self):
@@ -394,7 +395,7 @@ class MLModelCatalog(MLModel):
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
-            if self.model_type == "gnn" or self.model_type == "gat":
+            if self._model_type == "gnn" or self._model_type == "gat":
                 self._model = train_model_gnn(
                     self,
                     data=self.data,

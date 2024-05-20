@@ -2,12 +2,53 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .gat import GraphAttentionLayer
+import math
 from torch.nn.parameter import Parameter
 from .utils import (
     create_symm_matrix_from_vec,
     create_vec_from_symm_matrix,
     get_degree_matrix,
 )
+
+class GraphConvolution(nn.Module):
+    """
+    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
+    """
+
+    def __init__(self, in_features, out_features, bias=True):
+        super(GraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1.0 / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, input, adj):
+        support = torch.mm(input, self.weight)
+        output = torch.spmm(adj, support)
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+    def __repr__(self):
+        return (
+            self.__class__.__name__
+            + " ("
+            + str(self.in_features)
+            + " -> "
+            + str(self.out_features)
+            + ")"
+        )
 
 
 class GATSyntheticPerturb(nn.Module):
@@ -47,7 +88,7 @@ class GATSyntheticPerturb(nn.Module):
         else:
             self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
 
-        self.reset_parameters()
+        #self.reset_parameters()
         """
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
         self.gc2 = GraphConvolutionPerturb(nhid, nhid)
@@ -63,8 +104,10 @@ class GATSyntheticPerturb(nn.Module):
             self.add_module("attention_{}".format(i), attention)
 
         self.out_att = GraphAttentionLayer(
-            nhid * nheads, nclass, dropout=dropout, alpha=alpha, concat=False
+            nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
         )
+        
+        self.gcn = GraphConvolution(50, 7)
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
@@ -105,7 +148,8 @@ class GATSyntheticPerturb(nn.Module):
             # print(self.P_hat_symm.get_device())
             # print(self.sub_adj.get_device())
             A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(
-                self.num_nodes
+                self.num_nodes,
+                device=device
             )  # Use sigmoid to bound P_hat in [0,1]
 
         # D_tilde is the degree matrix
@@ -120,6 +164,7 @@ class GATSyntheticPerturb(nn.Module):
         x = torch.cat([att(x, norm_adj) for att in self.attentions], dim=1)
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, norm_adj))
+        x = self.gcn(x, norm_adj)
         return F.log_softmax(x, dim=1)
 
     def forward_prediction(self, x):
@@ -147,6 +192,8 @@ class GATSyntheticPerturb(nn.Module):
         x = torch.cat([att(x, norm_adj) for att in self.attentions], dim=1)
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, norm_adj))
+        x = self.gcn(x, norm_adj)
+
         return F.log_softmax(x, dim=1), self.P
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
@@ -167,7 +214,7 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = -F.nll_loss(output, y_pred_orig)
+        loss_pred = F.cross_entropy(output, (y_pred_orig+1)%7)
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)

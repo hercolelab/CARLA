@@ -1,1 +1,1 @@
-# from .model import CFGATExplainer
+from .model import CFGATExplainer

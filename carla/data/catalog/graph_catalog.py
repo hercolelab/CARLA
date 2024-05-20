@@ -52,7 +52,7 @@ class DataGraph(ABC):
 """
 
 
-class Platenoid(DataCatalog):
+class PlanetoidGraph(DataCatalog):
     def __init__(self, data_table: Union[str, pd.DataFrame]):
         self._data_table = data_table
         if self._data_table == "Cora":
@@ -105,7 +105,7 @@ class Platenoid(DataCatalog):
         if self.name == "Cora":
             cora = Planetoid(root="data/Planetoid", name="Cora")
             dataset = cora.data
-        if self.name == "CiteSeer":
+        elif self.name == "CiteSeer":
             citiseer = Planetoid(root="data/Planetoid", name="CiteSeer")
             dataset = citiseer.data
         else:
@@ -311,7 +311,7 @@ class AMLtoGraph(DataCatalog):
         adj_matrix = sparse_matrix.to_dense()
         return adj_matrix
 
-    def get_feat_node(dataGraph, norm_edge_index, node_dict):
+    def get_feat_node(self, dataGraph, norm_edge_index, node_dict):
         done = []
         array_data = []
         for i, arr in enumerate(norm_edge_index[0]):
@@ -324,7 +324,7 @@ class AMLtoGraph(DataCatalog):
                             break
         return array_data
 
-    def get_feat_edges(dataGraph, norm_edge_index, node_dict):
+    def get_feat_edges(self, dataGraph, norm_edge_index, node_dict):
         # create a new edge index with original coordinate
         new_edge_index = []
         for i, arr in enumerate(norm_edge_index[0]):
@@ -402,7 +402,7 @@ class AMLtoGraph(DataCatalog):
             "Account",
             "Account 1",
         ]
-        norm_edge_index = dense_to_sparse(adj_matrix)
+        norm_edge_index = dense_to_sparse(torch.tensor(adj_matrix))
 
         array_feat_node = self.get_feat_node(dataGraph, norm_edge_index, node_dict)
         df1 = pd.DataFrame(array_feat_node, columns=columns_name_node)

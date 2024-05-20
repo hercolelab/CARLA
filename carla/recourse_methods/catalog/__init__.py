@@ -4,6 +4,7 @@ from .causal_recourse import CausalRecourse
 from .cchvae import CCHVAE
 from .cem import CEM
 from .cfgnn import CFExplainer
+from .cfgat import CFGATExplainer
 from .clue import Clue
 from .crud import CRUD
 from .dice import Dice

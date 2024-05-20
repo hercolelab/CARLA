@@ -122,7 +122,7 @@ class GCNSyntheticPerturb(nn.Module):
     def forward(self, x, sub_adj):
         """ """
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.sub_adj = sub_adj
+        self.sub_adj = sub_adj.to(device)
 
         # Same as normalize_adj in utils.py except includes P_hat in A_tilde
         self.P_hat_symm = create_symm_matrix_from_vec(

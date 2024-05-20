@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
 
-from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
+from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
 # from carla.data.api import Data
 from carla.data.catalog.online_catalog import DataCatalog
@@ -203,17 +203,17 @@ class CFExplainer(RecourseMethod):
         cf_stats = []
 
         # if a cf example has been found then add it to the cf_stats list
-        if y_pred_new_actual != self.y_pred_orig:
+        if y_pred_new_actual != self.y_pred_orig and loss_graph_dist != 0.0:
 
             cf_stats = [
                 self.node_idx.item(),
                 self.new_idx,
-                cf_adj.detach().numpy(),
-                self.sub_adj.detach().numpy(),
+                cf_adj.detach().cpu().numpy(),
+                self.sub_adj.detach().cpu(),
                 self.y_pred_orig.item(),
                 y_pred_new.item(),
                 y_pred_new_actual.item(),
-                self.sub_labels[self.new_idx].numpy(),
+                self.sub_labels[self.new_idx].cpu().numpy(),
                 self.sub_adj.shape[0],
                 loss_total.item(),
                 loss_pred.item(),
@@ -225,8 +225,8 @@ class CFExplainer(RecourseMethod):
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
 
         plat = ["Cora", "CiteSeer", "PubMed"]
-        if factuals in plat:
-            df_test = Planetoid(factuals)
+        if type(factuals) != pd.DataFrame and factuals in plat:
+            df_test = PlanetoidGraph(factuals)
             data_graph = df_test.getDataGraph()
         else:
             # Construct df_test by factuals
@@ -354,9 +354,9 @@ class CFExplainer(RecourseMethod):
             # prendo da cf_example cf_adj
             cf_adj = cf_example[0][2]  # dovrei iterare (?)
             # Qua con Platenoid darà errore
-            pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)
+            pd_cf = df_test.reconstruct_Tabular(data_graph, cf_adj, node_dict)
             test_cf_examples.append(pd_cf)
-
+            break
         df_cf_example = pd.DataFrame(
             test_cf_sts,
             columns=[
@@ -375,7 +375,7 @@ class CFExplainer(RecourseMethod):
             ],
         )
 
-        path = "/test/saved_sts_cf/results1"
+        path = "test/saved_sts_cf/results1"
         df_cf_example.to_csv(path + ".csv")
         return test_cf_examples
 

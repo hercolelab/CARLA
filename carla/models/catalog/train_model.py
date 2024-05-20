@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 # from torch_geometric.utils.metric import accuracy
 from torcheval.metrics import MulticlassAccuracy
 
-from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
+from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 from carla.models.catalog.ANN_TF import AnnModel
 from carla.models.catalog.ANN_TF import AnnModel as ann_tf
 from carla.models.catalog.ANN_TORCH import AnnModel as ann_torch
@@ -287,7 +287,7 @@ def train_model_gnn(
         # create datagraph with type Data
         if isinstance(data, AMLtoGraph):
             datagraph = data.construct_GraphData()
-        elif isinstance(data, Planetoid):
+        elif isinstance(data, PlanetoidGraph):
             datagraph = data.getDataGraph()
 
         # create adj matrix by COO
@@ -298,7 +298,7 @@ def train_model_gnn(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
                 nout=hidden_size,  # da parametrizzare
-                nclass=2,
+                nclass=7,
                 dropout=0.0,
             )
         # per ora è la GAT
@@ -306,11 +306,12 @@ def train_model_gnn(
             model = gat_torch(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
-                nclass=2,
+                nclass=7,
                 dropout=0.0,
                 alpha=0.2,
                 nheads=8,
             )
+            #TODO: rendi dinamico nclass (2 per AML) 7 per Cora
 
         # training gnn
         _training_gnn_torch(
@@ -367,7 +368,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
         loss_train.backward()
 
-        clip_grad_norm(model.parameters(), clip)
+        #clip_grad_norm(model.parameters(), clip)
         optimizer.step()
         print(
             "Epoch: {:04d}".format(epoch + 1),

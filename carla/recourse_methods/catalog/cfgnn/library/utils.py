@@ -76,7 +76,7 @@ def create_symm_matrix_from_vec(vector, n_rows):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     matrix = torch.zeros(n_rows, n_rows, device=device)
     idx = torch.tril_indices(n_rows, n_rows, device=device)
-    matrix[idx[0], idx[1]] = vector
+    matrix[idx[0], idx[1]] = vector.to(device)
     symm_matrix = torch.tril(matrix) + torch.tril(matrix, -1).t()
     return symm_matrix
 

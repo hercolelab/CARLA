@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
 
-from carla.data.catalog.graph_catalog import AMLtoGraph, Planetoid
+from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
 # from carla.data.api import Data
 from carla.data.catalog.online_catalog import DataCatalog
@@ -182,7 +182,7 @@ class CFGATExplainer(RecourseMethod):
             output[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
-        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        #clip_grad_norm(self.cf_model.parameters(), 4.0)
         self.cf_optimizer.step()
 
         if verbose:
@@ -191,7 +191,7 @@ class CFGATExplainer(RecourseMethod):
                 f"Node idx: {self.node_idx}",
                 f"New idx: {self.new_idx}",
                 "Epoch: {:04d}".format(epoch + 1),
-                "loss: {:.4f}".format(loss_total.item()),
+                "loss: {}".format(loss_total.item()),
                 "pred loss: {:.4f}".format(loss_pred.item()),
                 "graph loss: {:.4f}".format(loss_graph_dist.item()),
             )
@@ -210,12 +210,12 @@ class CFGATExplainer(RecourseMethod):
             cf_stats = [
                 self.node_idx.item(),
                 self.new_idx,
-                cf_adj.detach().numpy(),
+                cf_adj.detach().cpu().numpy(),
                 self.sub_adj.detach().numpy(),
                 self.y_pred_orig.item(),
                 y_pred_new.item(),
                 y_pred_new_actual.item(),
-                self.sub_labels[self.new_idx].numpy(),
+                self.sub_labels[self.new_idx].cpu().numpy(),
                 self.sub_adj.shape[0],
                 loss_total.item(),
                 loss_pred.item(),
@@ -228,7 +228,7 @@ class CFGATExplainer(RecourseMethod):
 
         plat = ["Cora", "CiteSeer", "PubMed"]
         if factuals in plat:
-            df_test = Planetoid(factuals)
+            df_test = PlanetoidGraph(factuals)
             data_graph = df_test.getDataGraph()
         else:
             # Construct df_test by factuals
@@ -252,7 +252,7 @@ class CFGATExplainer(RecourseMethod):
         )  # According to reparam trick from GCN paper
 
         # output of GCN Syntethic model
-        y_pred_orig = self.mlmodel.predict_proba(features, norm_adj)
+        y_pred_orig = self.mlmodel.predict_gnn(features, norm_adj)
         # y_pred_orig = torch.argmax(output, dim=1)
 
         # Get CF examples in test set
@@ -275,7 +275,7 @@ class CFGATExplainer(RecourseMethod):
             self.sub_adj = sub_adj
             self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
-            self.y_pred_orig = y_pred_orig[new_idx]
+            self.y_pred_orig = y_pred_orig[i]
 
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
@@ -319,14 +319,14 @@ class CFGATExplainer(RecourseMethod):
                     f"y_true counts: {np.unique(labels.cpu().numpy(), return_counts=True)}"
                 )
                 print(
-                    f"y_pred_orig counts: {np.unique(y_pred_orig.cpu().numpy(), return_counts=True)}"
+                    f"y_pred_orig counts: {np.unique(y_pred_orig.detach().cpu().numpy(), return_counts=True)}"
                 )  # Confirm model is actually doing something
 
                 # Check that original model gives same prediction on full graph and subgraph
                 with torch.no_grad():
                     print(f"Output original model, full adj: {y_pred_orig[i]}")
                     print(
-                        f"Output original model, sub adj: {self.mlmodel.predict_proba(sub_feat, normalize_adj(sub_adj).to(self.device))[new_idx]}"
+                        f"Output original model, sub adj: {self.mlmodel.predict_proba_gnn(sub_feat, normalize_adj(sub_adj).to(self.device))[new_idx]}"
                     )
 
             # If cuda is avaialble move the computation on GPU
@@ -344,7 +344,7 @@ class CFGATExplainer(RecourseMethod):
             # because of the subgraph
             cf_example = self.explain(
                 node_idx=i,
-                cf_optimizer=self.cf_optimizer,
+                cf_optimizer="Adadelta",
                 new_idx=new_idx,
                 lr=self.lr,
                 n_momentum=self.n_momentum,

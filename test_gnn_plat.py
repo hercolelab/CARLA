@@ -1,12 +1,12 @@
 import pandas as pd
-
+import torch
 import carla.recourse_methods.catalog as recourse_catalog
-from carla.data.catalog import Planetoid
+from carla.data.catalog import PlanetoidGraph
 from carla.models.catalog import MLModelCatalog
 
-path_file = "Cora"
+path_file = "CiteSeer"
 # Data
-dataset = Planetoid(path_file)
+dataset = PlanetoidGraph(path_file)
 
 # Model
 
@@ -16,7 +16,7 @@ ml_model = MLModelCatalog(
 
 training_params = {
     "lr": 0.002,
-    "epochs": 200,
+    "epochs": 100,
     "batch_size": 1024,
     "hidden_size": [18, 9, 3],
 }
@@ -42,7 +42,7 @@ def data_testing(path):
 
 # Recourse Method
 
-test_factual = data_testing(path_file)
+#test_factual = data_testing(path_file)
 # hyper = {
 #     "cf_optimizer": "Adadelta",
 #     "lr": 0.05,
@@ -60,25 +60,25 @@ test_factual = data_testing(path_file)
 
 hyper = {
     "cf_optimizer": "Adadelta",
-    "lr": 0.05,
-    "num_epochs": 100,
-    "n_hid": 3,
+    "lr": 0.5,
+    "num_epochs": 1000,
+    "n_hid": 31,
     "dropout": 0.0,
     "alpha": 0.2,
     "beta": 0.5,
     "nheads": 8,
-    "num_classes": 2,
+    "num_classes": 7,
     "n_layers": 3,
     "n_momentum": 0,
     "verbose": True,
-    "device": "cpu",
+    "device": "cuda" if torch.cuda.is_available() else "cpu",
 }
 
-recourse_method = recourse_catalog.CFExplainer(
+recourse_method = recourse_catalog.CFGATExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper
 )
 
-df_cfs = recourse_method.get_counterfactuals("Cora")
+df_cfs = recourse_method.get_counterfactuals("CiteSeer")
 
 
 print(f"{df_cfs=}")

@@ -16,6 +16,43 @@ AML:
     - Account
     - Account.1
 
+Cora:
+  target: Is Laundering
+  continuous:
+    - From Bank
+    - To Bank
+    - Amount Received
+    - Amount Paid
+  categorical:
+    - Timestamp
+    - Account
+    - Account.1
+    - Receiving Currency
+    - Payment Currency
+    - Payment Format
+  immutable:
+    - Account
+    - Account.1
+
+
+CiteSeer:
+  target: Is Laundering
+  continuous:
+    - From Bank
+    - To Bank
+    - Amount Received
+    - Amount Paid
+  categorical:
+    - Timestamp
+    - Account
+    - Account.1
+    - Receiving Currency
+    - Payment Currency
+    - Payment Format
+  immutable:
+    - Account
+    - Account.1
+
 adult:
   target: income
   continuous:

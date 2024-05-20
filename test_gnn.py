@@ -16,7 +16,7 @@ ml_model = MLModelCatalog(
 
 training_params = {
     "lr": 0.002,
-    "epochs": 200,
+    "epochs": 1000,
     "batch_size": 1024,
     "hidden_size": [18, 9, 3],
 }
@@ -60,7 +60,7 @@ test_factual = data_testing(path_file)
 
 hyper = {
         "cf_optimizer": "Adadelta",
-        "lr": 0.05,
+        "lr": 0.5,
         "num_epochs": 100,
         "n_hid": 3,
         "dropout": 0.0,
@@ -71,7 +71,7 @@ hyper = {
         "n_layers": 3,
         "n_momentum": 0,
         "verbose": True,
-        "device": "cpu",
+        "device": "cuda",
     }
 
 recourse_method = recourse_catalog.CFExplainer(
