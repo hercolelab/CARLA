@@ -290,6 +290,8 @@ def train_model_gnn(
         elif isinstance(data, PlanetoidGraph):
             datagraph = data.getDataGraph()
 
+
+        nclass = torch.max(datagraph.y).item() + 1
         # create adj matrix by COO
         adj_matrix = data.create_adj_matrix(datagraph).squeeze()
         # initialize the model
@@ -298,7 +300,7 @@ def train_model_gnn(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
                 nout=hidden_size,  # da parametrizzare
-                nclass=7,
+                nclass=nclass,
                 dropout=0.0,
             )
         # per ora è la GAT
@@ -306,7 +308,7 @@ def train_model_gnn(
             model = gat_torch(
                 nfeat=len(datagraph.x[0]),
                 nhid=hidden_size,  # da parametrizzare
-                nclass=7,
+                nclass=nclass,
                 dropout=0.0,
                 alpha=0.2,
                 nheads=8,

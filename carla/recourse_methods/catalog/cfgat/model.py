@@ -6,7 +6,7 @@ import torch
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
-
+import os
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
 # from carla.data.api import Data
@@ -227,7 +227,7 @@ class CFGATExplainer(RecourseMethod):
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
 
         plat = ["Cora", "CiteSeer", "PubMed"]
-        if factuals in plat:
+        if type(factuals) != pd.DataFrame and factuals in plat:
             df_test = PlanetoidGraph(factuals)
             data_graph = df_test.getDataGraph()
         else:
@@ -267,7 +267,7 @@ class CFGATExplainer(RecourseMethod):
             )
             new_idx = node_dict[int(i)]
 
-            if len(sub_adj.shape) < 1 or all(
+            if len(sub_adj.shape) < 2 or all(
                 [True if i == 0 else False for i in sub_adj.shape]
             ):
                 continue
@@ -362,8 +362,15 @@ class CFGATExplainer(RecourseMethod):
 
             # prendo da cf_example cf_adj
             cf_adj = cf_example[0][2]  # dovrei iterare (?)
-            pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)
-            test_cf_examples.append(pd_cf)
+            
+            try:
+                pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)
+                test_cf_examples.append(pd_cf)
+                
+            except AttributeError:
+                
+                UserWarning(f"Dataset {factuals} cannot converted into a csv file!")
+            
 
         df_cf_example = pd.DataFrame(
             test_cf_sts,
@@ -383,8 +390,17 @@ class CFGATExplainer(RecourseMethod):
             ],
         )
 
-        path = "/test/saved_sts_cf/results1"
-        df_cf_example.to_csv(path + ".csv")
+        path: str = "test/saved_sts_cf/"
+        
+        file_name: str = "results_1"
+        
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path)
+            except Exception:
+                raise Exception
+            
+        df_cf_example.to_csv(path + f"{file_name}.csv")
         return test_cf_examples
 
 

@@ -15,7 +15,7 @@ ml_model = MLModelCatalog(
 )
 
 training_params = {
-    "lr": 0.002,
+    "lr": 0.02,
     "epochs": 1000,
     "batch_size": 1024,
     "hidden_size": [18, 9, 3],
@@ -62,7 +62,7 @@ hyper = {
         "cf_optimizer": "Adadelta",
         "lr": 0.5,
         "num_epochs": 100,
-        "n_hid": 3,
+        "n_hid": 31,
         "dropout": 0.0,
         "alpha": 0.2,
         "beta": 0.5,
@@ -74,7 +74,7 @@ hyper = {
         "device": "cuda",
     }
 
-recourse_method = recourse_catalog.CFExplainer(
+recourse_method = recourse_catalog.CFGATExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper
 )
 

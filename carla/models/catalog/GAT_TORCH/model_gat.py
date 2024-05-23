@@ -124,7 +124,8 @@ class GAT(nn.Module):
         )
         
                 
-        self.gcn = GraphConvolution(50, 7)
+        self.gcn = GraphConvolution(50, nclass)
+        # TODO: make it dynamic!
 
     def forward(self, x, adj):
         # x = F.dropout(x, self.dropout, training=self.training)

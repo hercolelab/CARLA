@@ -265,7 +265,7 @@ class CFExplainer(RecourseMethod):
             )
             new_idx = node_dict[int(i)]
 
-            if len(sub_adj.shape) < 1 or all(
+            if len(sub_adj.shape) < 5 or all(
                 [True if i == 0 else False for i in sub_adj.shape]
             ):
                 continue

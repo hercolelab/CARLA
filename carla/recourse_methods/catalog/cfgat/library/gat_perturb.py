@@ -107,7 +107,7 @@ class GATSyntheticPerturb(nn.Module):
             nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
         )
         
-        self.gcn = GraphConvolution(50, 7)
+        self.gcn = GraphConvolution(50, 6)
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
@@ -214,7 +214,7 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = F.cross_entropy(output, (y_pred_orig+1)%7)
+        loss_pred = F.cross_entropy(output, (y_pred_orig+1)%6)
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)

@@ -4,7 +4,7 @@ import carla.recourse_methods.catalog as recourse_catalog
 from carla.data.catalog import PlanetoidGraph
 from carla.models.catalog import MLModelCatalog
 
-path_file = "CiteSeer"
+path_file = "Cora"
 # Data
 dataset = PlanetoidGraph(path_file)
 
@@ -61,13 +61,13 @@ def data_testing(path):
 hyper = {
     "cf_optimizer": "Adadelta",
     "lr": 0.5,
-    "num_epochs": 1000,
+    "num_epochs": 500,
     "n_hid": 31,
     "dropout": 0.0,
     "alpha": 0.2,
     "beta": 0.5,
     "nheads": 8,
-    "num_classes": 7,
+    "num_classes": 6,
     "n_layers": 3,
     "n_momentum": 0,
     "verbose": True,
@@ -78,7 +78,7 @@ recourse_method = recourse_catalog.CFGATExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper
 )
 
-df_cfs = recourse_method.get_counterfactuals("CiteSeer")
+df_cfs = recourse_method.get_counterfactuals("Cora")
 
 
 print(f"{df_cfs=}")
