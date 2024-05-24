@@ -67,7 +67,7 @@ hyper = {
     "alpha": 0.2,
     "beta": 0.5,
     "nheads": 8,
-    "num_classes": 6,
+    "num_classes": 7,
     "n_layers": 3,
     "n_momentum": 0,
     "verbose": True,

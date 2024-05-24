@@ -107,7 +107,7 @@ class GATSyntheticPerturb(nn.Module):
             nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
         )
         
-        self.gcn = GraphConvolution(50, 6)
+        self.gcn = GraphConvolution(50, self.nclass)
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
