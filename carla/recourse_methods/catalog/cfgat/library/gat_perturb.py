@@ -1,14 +1,17 @@
+# from .gat import GraphAttentionLayer
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .gat import GraphAttentionLayer
-import math
 from torch.nn.parameter import Parameter
+
 from .utils import (
     create_symm_matrix_from_vec,
     create_vec_from_symm_matrix,
     get_degree_matrix,
 )
+
 
 class GraphConvolution(nn.Module):
     """
@@ -39,6 +42,65 @@ class GraphConvolution(nn.Module):
             return output + self.bias
         else:
             return output
+
+    def __repr__(self):
+        return (
+            self.__class__.__name__
+            + " ("
+            + str(self.in_features)
+            + " -> "
+            + str(self.out_features)
+            + ")"
+        )
+
+
+class GraphAttentionLayer(nn.Module):
+    """
+    Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
+    """
+
+    def __init__(self, in_features, out_features, dropout, alpha, concat=True):
+        super(GraphAttentionLayer, self).__init__()
+        self.dropout = dropout
+        self.in_features = in_features
+        self.out_features = out_features
+        self.alpha = alpha
+        self.concat = concat
+
+        self.W = nn.Parameter(torch.empty(size=(in_features, out_features)))
+        nn.init.xavier_uniform_(self.W.data, gain=1.414)
+        self.a = nn.Parameter(torch.empty(size=(2 * out_features, 1)))
+        nn.init.xavier_uniform_(self.a.data, gain=1.414)
+
+        self.leakyrelu = nn.LeakyReLU(self.alpha)
+
+    def forward(self, h, adj):
+        Wh = torch.mm(
+            h, self.W
+        )  # h.shape: (N, in_features), Wh.shape: (N, out_features)
+        e = self._prepare_attentional_mechanism_input(Wh)
+
+        zero_vec = -9e15 * torch.ones_like(e)
+        attention = torch.where(adj > 0, e, zero_vec)
+        attention = F.softmax(attention, dim=1)
+        # attention = F.dropout(attention, self.dropout, training=self.training)
+        h_prime = torch.matmul(attention, Wh)
+
+        if self.concat:
+            return F.elu(h_prime)
+        else:
+            return h_prime
+
+    def _prepare_attentional_mechanism_input(self, Wh):
+        # Wh.shape (N, out_feature)
+        # self.a.shape (2 * out_feature, 1)
+        # Wh1&2.shape (N, 1)
+        # e.shape (N, N)
+        Wh1 = torch.matmul(Wh, self.a[: self.out_features, :])
+        Wh2 = torch.matmul(Wh, self.a[self.out_features :, :])
+        # broadcast add
+        e = Wh1 + Wh2.T
+        return self.leakyrelu(e)
 
     def __repr__(self):
         return (
@@ -88,7 +150,7 @@ class GATSyntheticPerturb(nn.Module):
         else:
             self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
 
-        #self.reset_parameters()
+        # self.reset_parameters()
         """
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
         self.gc2 = GraphConvolutionPerturb(nhid, nhid)
@@ -106,7 +168,7 @@ class GATSyntheticPerturb(nn.Module):
         self.out_att = GraphAttentionLayer(
             nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
         )
-        
+
         self.gcn = GraphConvolution(50, self.nclass)
 
     def reset_parameters(self, eps=10**-4):
@@ -148,8 +210,7 @@ class GATSyntheticPerturb(nn.Module):
             # print(self.P_hat_symm.get_device())
             # print(self.sub_adj.get_device())
             A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj + torch.eye(
-                self.num_nodes,
-                device=device
+                self.num_nodes, device=device
             )  # Use sigmoid to bound P_hat in [0,1]
 
         # D_tilde is the degree matrix
@@ -178,7 +239,9 @@ class GATSyntheticPerturb(nn.Module):
         if self.edge_additions:
             A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj.to(device) + torch.eye(self.num_nodes, device=device)
+            A_tilde = self.P * self.adj.to(device) + torch.eye(
+                self.num_nodes, device=device
+            )
 
         D_tilde = get_degree_matrix(A_tilde)
         # Raise to power -1/2, set all infs to 0s
@@ -214,7 +277,7 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = F.cross_entropy(output, (y_pred_orig+1)%6)
+        loss_pred = F.cross_entropy(output, (y_pred_orig + 1) % 6)
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)

@@ -1,10 +1,12 @@
+import math
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 from torch.nn.parameter import Parameter
 
+# Non utilizzato
 
 
 class GraphConvolution(nn.Module):
@@ -46,7 +48,8 @@ class GraphConvolution(nn.Module):
             + str(self.out_features)
             + ")"
         )
-        
+
+
 class GraphAttentionLayer(nn.Module):
     """
     Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
@@ -122,8 +125,7 @@ class GAT(nn.Module):
         self.out_att = GraphAttentionLayer(
             nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
         )
-        
-                
+
         self.gcn = GraphConvolution(50, 2)
 
     def forward(self, x, adj):
@@ -132,7 +134,7 @@ class GAT(nn.Module):
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, adj))
         x = self.gcn(x, adj)
-       
+
         return F.log_softmax(x, dim=1)
 
     def loss(self, pred, label):
