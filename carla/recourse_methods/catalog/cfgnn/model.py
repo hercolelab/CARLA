@@ -180,7 +180,7 @@ class CFExplainer(RecourseMethod):
             output[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
-        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        #clip_grad_norm(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
 
         if verbose:
@@ -265,7 +265,7 @@ class CFExplainer(RecourseMethod):
             )
             new_idx = node_dict[int(i)]
 
-            if len(sub_adj.shape) < 5 or all(
+            if len(sub_adj.shape) < 1 or all(
                 [True if i == 0 else False for i in sub_adj.shape]
             ):
                 continue

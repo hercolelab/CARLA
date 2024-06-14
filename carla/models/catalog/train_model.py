@@ -291,7 +291,7 @@ def train_model_gnn(
             datagraph = data.getDataGraph()
 
 
-        nclass = torch.max(datagraph.y).item() + 1
+        nclass = torch.max(datagraph.y.long()).item() + 1
         # create adj matrix by COO
         adj_matrix = data.create_adj_matrix(datagraph).squeeze()
         # initialize the model

@@ -4,7 +4,7 @@ import carla.recourse_methods.catalog as recourse_catalog
 from carla.data.catalog import AMLtoGraph
 from carla.models.catalog import MLModelCatalog
 
-path_file = "test/data/LI-Small_Trans.csv"
+path_file = "data/AML_Laund_Clean.csv"
 # Data
 dataset = AMLtoGraph(path_file)
 
@@ -33,8 +33,7 @@ def data_testing(path):
 
     dataset = pd.read_csv(path)
 
-    percentuale_training = 0.005
-    idx = [i for i in range(int(len(dataset)*0.001))]
+    idx = [i for i in range(int(len(dataset)*0.25))]
     test_set = dataset.iloc[idx]
     #test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set
@@ -61,7 +60,7 @@ test_factual = data_testing(path_file)
 hyper = {
         "cf_optimizer": "Adadelta",
         "lr": 0.5,
-        "num_epochs": 100,
+        "num_epochs": 1000,
         "n_hid": 31,
         "dropout": 0.0,
         "alpha": 0.2,
@@ -73,6 +72,10 @@ hyper = {
         "verbose": True,
         "device": "cuda",
     }
+
+# recourse_method = recourse_catalog.CFExplainer(
+#     mlmodel=ml_model, data=dataset, hyperparams=hyper
+# )
 
 recourse_method = recourse_catalog.CFGATExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper

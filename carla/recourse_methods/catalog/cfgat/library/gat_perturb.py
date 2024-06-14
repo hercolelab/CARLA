@@ -277,7 +277,7 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = F.cross_entropy(output, (y_pred_orig + 1) % 6)
+        loss_pred = F.cross_entropy(output, (y_pred_orig + 1) % 2)
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)

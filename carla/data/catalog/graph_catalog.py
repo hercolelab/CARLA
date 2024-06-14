@@ -171,11 +171,11 @@ class AMLtoGraph(DataCatalog):
         )
 
         df["Account"] = df["From Bank"].astype(str) + "_" + df["Account"]
-        df["Account.1"] = df["To Bank"].astype(str) + "_" + df["Account.1"]
+        df["Account1"] = df["To Bank"].astype(str) + "_" + df["Account1"]
         df = df.sort_values(by=["Account"])
-        receiving_df = df[["Account.1", "Amount Received", "Receiving Currency"]]
+        receiving_df = df[["Account1", "Amount Received", "Receiving Currency"]]
         paying_df = df[["Account", "Amount Paid", "Payment Currency"]]
-        receiving_df = receiving_df.rename({"Account.1": "Account"}, axis=1)
+        receiving_df = receiving_df.rename({"Account1": "Account"}, axis=1)
         currency_ls = sorted(df["Receiving Currency"].unique())
 
         return df, receiving_df, paying_df, currency_ls
@@ -183,16 +183,16 @@ class AMLtoGraph(DataCatalog):
     # Get a dataframe with the following columns: Account | Bank | Is Laundering
     def get_all_account(self, df):
         ldf = df[["Account", "From Bank"]]
-        rdf = df[["Account.1", "To Bank"]]
+        rdf = df[["Account1", "To Bank"]]
         suspicious = df[df["Is Laundering"] == 1]
         s1 = suspicious[["Account", "Is Laundering"]]
-        s2 = suspicious[["Account.1", "Is Laundering"]]
-        s2 = s2.rename({"Account.1": "Account"}, axis=1)
+        s2 = suspicious[["Account1", "Is Laundering"]]
+        s2 = s2.rename({"Account1": "Account"}, axis=1)
         suspicious = pd.concat([s1, s2], join="outer")
         suspicious = suspicious.drop_duplicates()
 
         ldf = ldf.rename({"From Bank": "Bank"}, axis=1)
-        rdf = rdf.rename({"Account.1": "Account", "To Bank": "Bank"}, axis=1)
+        rdf = rdf.rename({"Account1": "Account", "To Bank": "Bank"}, axis=1)
         df = pd.concat([ldf, rdf], join="outer")
         df = df.drop_duplicates()
 
@@ -230,8 +230,8 @@ class AMLtoGraph(DataCatalog):
         accounts["ID"] = accounts.index
         mapping_dict = dict(zip(accounts["Account"], accounts["ID"]))
         df["From"] = df["Account"].map(mapping_dict)
-        df["To"] = df["Account.1"].map(mapping_dict)
-        df = df.drop(["Account", "Account.1", "From Bank", "To Bank"], axis=1)
+        df["To"] = df["Account1"].map(mapping_dict)
+        df = df.drop(["Account", "Account1", "From Bank", "To Bank"], axis=1)
 
         edge_index = torch.stack(
             [torch.from_numpy(df["From"].values), torch.from_numpy(df["To"].values)],
