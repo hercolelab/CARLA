@@ -11,7 +11,7 @@ dataset = AMLtoGraph(path_file)
 # Model
 
 ml_model = MLModelCatalog(
-    data=dataset, model_type="gat", load_online=False, backend="pytorch"
+    data=dataset, model_type="gnn", load_online=False, backend="pytorch"
 )
 
 training_params = {
@@ -33,7 +33,7 @@ def data_testing(path):
 
     dataset = pd.read_csv(path)
 
-    idx = [i for i in range(int(len(dataset)*0.25))]
+    idx = [i for i in range(int(len(dataset)*0.2))]
     test_set = dataset.iloc[idx]
     #test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set
@@ -73,13 +73,13 @@ hyper = {
         "device": "cuda",
     }
 
-# recourse_method = recourse_catalog.CFExplainer(
-#     mlmodel=ml_model, data=dataset, hyperparams=hyper
-# )
-
-recourse_method = recourse_catalog.CFGATExplainer(
+recourse_method = recourse_catalog.CFExplainer(
     mlmodel=ml_model, data=dataset, hyperparams=hyper
 )
+
+# recourse_method = recourse_catalog.CFGATExplainer(
+#     mlmodel=ml_model, data=dataset, hyperparams=hyper
+# )
 
 df_cfs = recourse_method.get_counterfactuals(test_factual)
 
