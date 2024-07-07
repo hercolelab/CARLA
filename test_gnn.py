@@ -18,7 +18,7 @@ training_params = {
     "lr": 0.02,
     "epochs": 1000,
     "batch_size": 1024,
-    "hidden_size": [18, 9, 3],
+    "hidden_size": [31, 31, 31],
 }
 
 ml_model.train(
@@ -33,9 +33,9 @@ def data_testing(path):
 
     dataset = pd.read_csv(path)
 
-    idx = [i for i in range(int(len(dataset)*0.2))]
+    idx = [i for i in range(int(len(dataset) * 0.2))]
     test_set = dataset.iloc[idx]
-    #test_set = dataset.sample(frac=percentuale_training, random_state=42)
+    # test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set
 
 
@@ -56,25 +56,39 @@ test_factual = data_testing(path_file)
 #     "device": "cuda",
 # }
 
+hyper_gnn = {
+    "cf_optimizer": "Adadelta",
+    "lr": 0.5,
+    "num_epochs": 1000,
+    "hid_list": [31, 31, 31],
+    "dropout": 0.0,
+    "beta": 0.5,
+    "num_classes": 2,
+    "n_layers": 3,
+    "n_momentum": 0,
+    "verbose": True,
+    "device": "cuda",
+}
 
-hyper = {
-        "cf_optimizer": "Adadelta",
-        "lr": 0.5,
-        "num_epochs": 1000,
-        "n_hid": 31,
-        "dropout": 0.0,
-        "alpha": 0.2,
-        "beta": 0.5,
-        "nheads": 8,
-        "num_classes": 2,
-        "n_layers": 3,
-        "n_momentum": 0,
-        "verbose": True,
-        "device": "cuda",
-    }
+hyper_gat = {
+    "cf_optimizer": "Adadelta",
+    "lr": 0.5,
+    "num_epochs": 1000,
+    "hid_attr_list": [31, 31, 31, 31, 31, 31, 31, 31],
+    "hid_list": [31, 31, 31],
+    "dropout": 0.0,
+    "alpha": 0.2,
+    "beta": 0.5,
+    "nheads": 8,
+    "num_classes": 2,
+    "n_layers": 3,
+    "n_momentum": 0,
+    "verbose": True,
+    "device": "cuda",
+}
 
 recourse_method = recourse_catalog.CFExplainer(
-    mlmodel=ml_model, data=dataset, hyperparams=hyper
+    mlmodel=ml_model, data=dataset, hyperparams=hyper_gnn
 )
 
 # recourse_method = recourse_catalog.CFGATExplainer(

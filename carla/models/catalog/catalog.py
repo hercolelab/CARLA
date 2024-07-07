@@ -341,7 +341,7 @@ class MLModelCatalog(MLModel):
         epochs=None,
         batch_size=None,
         force_train=False,
-        hidden_size=[18, 9, 3],
+        hidden_size=[31, 31, 31],
         n_estimators=5,
         max_depth=5,
     ):
@@ -403,7 +403,7 @@ class MLModelCatalog(MLModel):
                     weight_decay=0.001,
                     epochs=epochs,
                     clip=2.0,
-                    hidden_size=31,
+                    hidden_list=hidden_size,
                 )
 
             else:

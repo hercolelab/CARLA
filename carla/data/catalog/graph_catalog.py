@@ -114,6 +114,13 @@ class PlanetoidGraph(DataCatalog):
 
         return dataset
 
+    # METODI NON USATI --> SERVONO SOLO PER RISOLVERE GLI ERRORI MYPY --> SISTEMARLI DOPO
+    def construct_GraphData(self):
+        pass
+
+    def reconstruct_Tabular(self, data_graph, cf_adj, node_dict):
+        pass
+
 
 class AMLtoGraph(DataCatalog):
     def __init__(self, data_table: Union[str, pd.DataFrame]):

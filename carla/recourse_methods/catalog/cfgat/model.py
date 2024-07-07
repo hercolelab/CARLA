@@ -1,12 +1,14 @@
+import os
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.optim as optim
-from torch.nn.utils import clip_grad_norm
+
+# from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
-import os
+
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
 # from carla.data.api import Data
@@ -55,7 +57,8 @@ class CFGATExplainer(RecourseMethod):
         "cf_optimizer": "Adadelta",
         "lr": 0.05,
         "num_epochs": 100,
-        "n_hid": 3,
+        "hid_attr_list": [31, 31, 31, 31, 31, 31, 31, 31],
+        "hid_list": [50, 50, 50],
         "dropout": 0.0,
         "alpha": 0.2,
         "beta": 0.5,
@@ -83,7 +86,8 @@ class CFGATExplainer(RecourseMethod):
         self.cf_optimizer = self._params["cf_optimizer"]
         self.lr = self._params["lr"]
         self.num_epochs = self._params["num_epochs"]
-        self.n_hid = self._params["n_hid"]
+        self.hid_attr_list = self._params["hid_attr_list"]
+        self.hid_list = self._params["hid_list"]
         self.dropout = self._params["dropout"]
         self.beta = self._params["beta"]
         self.alpha = self._params["alpha"]
@@ -182,7 +186,7 @@ class CFGATExplainer(RecourseMethod):
             output[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
-        #clip_grad_norm(self.cf_model.parameters(), 4.0)
+        # clip_grad_norm(self.cf_model.parameters(), 4.0)
         self.cf_optimizer.step()
 
         if verbose:
@@ -227,12 +231,17 @@ class CFGATExplainer(RecourseMethod):
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
 
         plat = ["Cora", "CiteSeer", "PubMed"]
-        if type(factuals) != pd.DataFrame and factuals in plat:
-            df_test = PlanetoidGraph(factuals)
-            data_graph = df_test.getDataGraph()
+        if isinstance(factuals, str) and factuals in plat:
+            df_test_plat = PlanetoidGraph(factuals)
         else:
             # Construct df_test by factuals
-            df_test = AMLtoGraph(factuals)
+            df_test_AML = AMLtoGraph(factuals)
+
+        if isinstance(df_test_plat, PlanetoidGraph):
+            df_test = df_test_plat
+            data_graph = df_test.getDataGraph()
+        elif isinstance(df_test_AML, AMLtoGraph):
+            df_test = df_test_AML
             data_graph = df_test.construct_GraphData()
 
         adj = df_test.create_adj_matrix(
@@ -282,7 +291,8 @@ class CFGATExplainer(RecourseMethod):
             # and train the perturbation matrix to change the prediction
             self.cf_model = GATSyntheticPerturb(
                 nfeat=self.sub_feat.shape[1],
-                nhid=self.n_hid,
+                hid_list_att=self.hid_attr_list,
+                hid_list_conv=self.hid_list,
                 nclass=self.num_classes,
                 adj=self.sub_adj,
                 dropout=self.dropout,
@@ -362,15 +372,14 @@ class CFGATExplainer(RecourseMethod):
 
             # prendo da cf_example cf_adj
             cf_adj = cf_example[0][2]  # dovrei iterare (?)
-            
+
             try:
                 pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)
                 test_cf_examples.append(pd_cf)
-                
+
             except AttributeError:
-                
+
                 UserWarning(f"Dataset {factuals} cannot converted into a csv file!")
-            
 
         df_cf_example = pd.DataFrame(
             test_cf_sts,
@@ -391,15 +400,15 @@ class CFGATExplainer(RecourseMethod):
         )
 
         path: str = "test/saved_sts_cf/"
-        
+
         file_name: str = "results_1"
-        
+
         if not os.path.exists(path):
             try:
                 os.makedirs(path)
             except Exception:
                 raise Exception
-            
+
         df_cf_example.to_csv(path + f"{file_name}.csv")
         return test_cf_examples
 

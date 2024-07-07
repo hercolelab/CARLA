@@ -54,22 +54,37 @@ class GCNSynthetic(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
 
-    def __init__(self, nfeat, nhid, nout, nclass, dropout):
+    def __init__(self, nfeat: int, hid_list: list, nclass: int, dropout: int):
         super(GCNSynthetic, self).__init__()
 
-        self.gc1 = GraphConvolution(nfeat, nhid)
-        self.gc2 = GraphConvolution(nhid, nhid)
-        self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid + nhid + nout, nclass)
+        self.layers: nn.ModuleList = nn.ModuleList()
+        self.use_dropout = dropout > 0.0
+
+        current_dim = nfeat
+        for hids in hid_list:
+            self.layers.append(
+                GraphConvolution(in_features=current_dim, out_features=hids)
+            )
+
+            current_dim = hids
+
+        self.layers.append(nn.Linear(sum(hid_list), nclass))
         self.dropout = dropout
 
     def forward(self, x, adj):
-        x1 = F.relu(self.gc1(x, adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
+        cat_list = []
+        # Apply a ReLU activation function and dropout (if used) to each hidden layer
+        for layer in self.layers[:-1]:
+            x = layer(x, adj)
+            if isinstance(layer, GraphConvolution):
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+            cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        x = self.layers[-1](torch.cat(cat_list), dim=1)
+
+        # x = self.lin(torch.cat((x1, x2, x3), dim=1)) da vedere
         return F.log_softmax(x, dim=1)
 
     def loss(self, pred, label):

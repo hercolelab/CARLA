@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.optim as optim
-from torch.nn.utils import clip_grad_norm
+
+# from torch.nn.utils import clip_grad_norm
 from torch_geometric.utils import dense_to_sparse
 
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
@@ -55,7 +56,7 @@ class CFExplainer(RecourseMethod):
         "cf_optimizer": "Adadelta",
         "lr": 0.05,
         "num_epochs": 100,
-        "n_hid": 3,
+        "hid_list": [31, 31, 31],
         "dropout": 0.0,
         "beta": 0.5,
         "num_classes": 2,
@@ -83,7 +84,7 @@ class CFExplainer(RecourseMethod):
         self.cf_optimizer = self._params["cf_optimizer"]
         self.lr = self._params["lr"]
         self.num_epochs = self._params["num_epochs"]
-        self.n_hid = self._params["n_hid"]
+        self.hid_list = self._params["hid_list"]
         self.dropout = self._params["dropout"]
         self.beta = self._params["beta"]
         self.num_classes = self._params["num_classes"]
@@ -180,7 +181,7 @@ class CFExplainer(RecourseMethod):
             output[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
-        #clip_grad_norm(self.cf_model.parameters(), 2.0)
+        # clip_grad_norm(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
 
         if verbose:
@@ -225,12 +226,17 @@ class CFExplainer(RecourseMethod):
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
 
         plat = ["Cora", "CiteSeer", "PubMed"]
-        if type(factuals) != pd.DataFrame and factuals in plat:
-            df_test = PlanetoidGraph(factuals)
-            data_graph = df_test.getDataGraph()
+        if isinstance(factuals, str) and factuals in plat:
+            df_test_plat = PlanetoidGraph(factuals)
         else:
             # Construct df_test by factuals
-            df_test = AMLtoGraph(factuals)
+            df_test_AML = AMLtoGraph(factuals)
+
+        if isinstance(df_test_plat, PlanetoidGraph):
+            df_test = df_test_plat
+            data_graph = df_test.getDataGraph()
+        elif isinstance(df_test_AML, AMLtoGraph):
+            df_test = df_test_AML
             data_graph = df_test.construct_GraphData()
 
         adj = df_test.create_adj_matrix(
@@ -280,8 +286,7 @@ class CFExplainer(RecourseMethod):
             # and train the perturbation matrix to change the prediction
             self.cf_model = GCNSyntheticPerturb(
                 nfeat=self.sub_feat.shape[1],
-                nhid=self.n_hid,
-                nout=self.n_hid,
+                hid_list=self.hid_list,
                 nclass=self.num_classes,
                 adj=self.sub_adj,
                 dropout=self.dropout,

@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .gcn import GraphConvolution
 from torch.nn.parameter import Parameter
+
+from .gcn import GraphConvolution
 from .utils import (
     create_symm_matrix_from_vec,
     create_vec_from_symm_matrix,
@@ -66,8 +67,7 @@ class GCNSyntheticPerturb(nn.Module):
     def __init__(
         self,
         nfeat: int,
-        nhid: int,
-        nout: int,
+        hid_list: list,
         nclass: int,
         adj,
         dropout,
@@ -97,11 +97,35 @@ class GCNSyntheticPerturb(nn.Module):
 
         self.reset_parameters()
 
+        # Dynamic
+        self.layers: nn.ModuleList = nn.ModuleList()
+        self.use_dropout = dropout > 0.0
+
+        current_dim = nfeat
+        i = 0
+        for hids in hid_list:
+
+            if i == len(hid_list):  # last layer --> Convolution Layer
+                self.layers.append(
+                    GraphConvolution(in_features=current_dim, out_features=hids)
+                )
+            else:  # before last layer --> Convolution Perturb Layer
+                self.layers.append(
+                    GraphConvolutionPerturb(in_features=current_dim, out_features=hids)
+                )
+            current_dim = hids
+            i += 1
+
+        self.layers.append(nn.Linear(sum(hid_list), nclass))
+        self.dropout = dropout
+
+        """
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
         self.gc2 = GraphConvolutionPerturb(nhid, nhid)
         self.gc3 = GraphConvolution(nhid, nout)
         self.lin = nn.Linear(nhid + nhid + nout, nclass)
         self.dropout = dropout
+        """
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
@@ -150,12 +174,27 @@ class GCNSyntheticPerturb(nn.Module):
         # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
         norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
+        cat_list = []
+        # Apply a ReLU activation function and dropout (if used) to each hidden layer
+        for layer in self.layers[:-1]:
+            x = layer(x, norm_adj)
+            if isinstance(layer, (GraphConvolution, GraphConvolutionPerturb)):
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+            cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        x = self.layers[-1](torch.cat(cat_list), dim=1)
+
+        """
         x1 = F.relu(self.gc1(x, norm_adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
         x2 = F.relu(self.gc2(x1, norm_adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
+        """
+
         return F.log_softmax(x, dim=1)
 
     def forward_prediction(self, x):
@@ -168,7 +207,9 @@ class GCNSyntheticPerturb(nn.Module):
         if self.edge_additions:
             A_tilde = self.P + torch.eye(self.num_nodes)
         else:
-            A_tilde = self.P * self.adj.to(device) + torch.eye(self.num_nodes, device=device)
+            A_tilde = self.P * self.adj.to(device) + torch.eye(
+                self.num_nodes, device=device
+            )
 
         D_tilde = get_degree_matrix(A_tilde)
         # Raise to power -1/2, set all infs to 0s
@@ -178,12 +219,28 @@ class GCNSyntheticPerturb(nn.Module):
         # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
         norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
+        cat_list = []
+        # Apply a ReLU activation function and dropout (if used) to each hidden layer
+        for layer in self.layers[:-1]:
+            x = layer(x, norm_adj)
+            if isinstance(layer, (GraphConvolution, GraphConvolutionPerturb)):
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+            cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        x = self.layers[-1](torch.cat(cat_list), dim=1)
+
+        """
+
         x1 = F.relu(self.gc1(x, norm_adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
         x2 = F.relu(self.gc2(x1, norm_adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
+
+        """
         return F.log_softmax(x, dim=1), self.P
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):

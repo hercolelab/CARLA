@@ -54,6 +54,54 @@ class GraphConvolution(nn.Module):
         )
 
 
+class GraphConvolutionPerturb(nn.Module):
+    """
+    Similar to GraphConvolution except includes P_hat
+    It is referred in the original paper as g(A_v, X_v, W; P) = $softmax [\sqrt(D^{line}_v]) (P*A_v + I) \sqrt(D^{line}_v]) X_v * W$
+    """
+
+    def __init__(self, in_features, out_features, bias=True):
+        super(GraphConvolutionPerturb, self).__init__()
+
+        self.in_features = in_features
+        self.out_features = out_features
+
+        # Build a random weight tensor
+        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+
+        # If bias then build a random tensor for bias
+        if bias is not None:
+            self.bias = Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(self, input: torch.Tensor, adj: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+
+        args:
+                input: the features of the graph
+
+                adj: the adjacency matrix
+        """
+
+        support = torch.mm(input, self.weight)
+
+        output = torch.spmm(adj, support)
+
+        return output if self.bias is None else output + self.bias
+
+    def __repr__(self):
+        return (
+            self.__class__.__name__
+            + " ("
+            + str(self.in_features)
+            + " -> "
+            + str(self.out_features)
+            + ")"
+        )
+
+
 class GraphAttentionLayer(nn.Module):
     """
     Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
@@ -117,7 +165,8 @@ class GATSyntheticPerturb(nn.Module):
     def __init__(
         self,
         nfeat: int,
-        nhid: int,
+        hid_list_att: list,
+        hid_list_conv: list,
         nclass: int,
         adj,
         dropout,
@@ -151,13 +200,49 @@ class GATSyntheticPerturb(nn.Module):
             self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
 
         # self.reset_parameters()
-        """
-        self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
-        self.gc2 = GraphConvolutionPerturb(nhid, nhid)
-        self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid + nhid + nout, nclass)
         self.dropout = dropout
+
+        # Dynamic attentions
+        self.attentions = [
+            GraphAttentionLayer(
+                nfeat, hid_list_att, dropout=dropout, alpha=alpha, concat=True
+            )
+            for _ in range(nheads)
+        ]
+        for i, attention in enumerate(self.attentions):
+            self.add_module("attention_{}".format(i), attention)
+
+        self.out_att = GraphAttentionLayer(
+            hid_list_att[nheads - 1] * nheads,
+            hid_list_conv[0],
+            dropout=dropout,
+            alpha=alpha,
+            concat=False,
+        )
+
+        # dynamic layers conv
+        self.layers_conv: nn.ModuleList = nn.ModuleList()
+        self.use_dropout = dropout > 0.0
+
+        current_dim = hid_list_conv[0]
+        hid_list = hid_list_conv[1:]
+        i = 0
+        for hids in hid_list:
+            if i == len(hid_list):  # last layer --> Convolution Layer
+                self.layers_conv.append(
+                    GraphConvolution(in_features=current_dim, out_features=hids)
+                )
+            else:  # before last layer --> Convolution Perturb Layer
+                self.layers_conv.append(
+                    GraphConvolutionPerturb(in_features=current_dim, out_features=hids)
+                )
+            current_dim = hids
+            i += 1
+
+        self.layers_conv.append(nn.Linear(sum(hid_list), nclass))
+
         """
+
         self.attentions = [
             GraphAttentionLayer(nfeat, nhid, dropout=dropout, alpha=alpha, concat=True)
             for _ in range(nheads)
@@ -170,6 +255,7 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         self.gcn = GraphConvolution(50, self.nclass)
+        """
 
     def reset_parameters(self, eps=10**-4):
         # Think more about how to initialize this
@@ -225,7 +311,19 @@ class GATSyntheticPerturb(nn.Module):
         x = torch.cat([att(x, norm_adj) for att in self.attentions], dim=1)
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, norm_adj))
-        x = self.gcn(x, norm_adj)
+        # Convolution Layers
+        cat_list = []
+        # dynamic conv
+        for layer in self.layers_conv[:-1]:
+            x = layer(x, norm_adj)
+            if isinstance(layer, GraphConvolution):
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+            cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        x = self.layers_conv[-1](torch.cat(cat_list), dim=1)
+
         return F.log_softmax(x, dim=1)
 
     def forward_prediction(self, x):
@@ -255,7 +353,18 @@ class GATSyntheticPerturb(nn.Module):
         x = torch.cat([att(x, norm_adj) for att in self.attentions], dim=1)
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, norm_adj))
-        x = self.gcn(x, norm_adj)
+        # Convolution Layers
+        cat_list = []
+        # dynamic conv
+        for layer in self.layers_conv[:-1]:
+            x = layer(x, norm_adj)
+            if isinstance(layer, GraphConvolution):
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+            cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        x = self.layers_conv[-1](torch.cat(cat_list), dim=1)
 
         return F.log_softmax(x, dim=1), self.P
 

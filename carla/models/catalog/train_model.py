@@ -8,7 +8,8 @@ import torch.nn.functional as F
 import xgboost
 from sklearn.ensemble import RandomForestClassifier
 from torch import nn
-from torch.nn.utils import clip_grad_norm
+
+# from torch.nn.utils import clip_grad_norm
 from torch.utils.data import DataLoader, Dataset
 
 # from torch_geometric.utils import dense_to_sparse
@@ -279,7 +280,7 @@ def train_model_gnn(
     weight_decay: float,
     epochs: int,
     clip: float,
-    hidden_size: int,
+    hidden_list: list,
 ):
     if catalog_model.backend == "pytorch":
         # initialize dataframe
@@ -290,7 +291,6 @@ def train_model_gnn(
         elif isinstance(data, PlanetoidGraph):
             datagraph = data.getDataGraph()
 
-
         nclass = torch.max(datagraph.y.long()).item() + 1
         # create adj matrix by COO
         adj_matrix = data.create_adj_matrix(datagraph).squeeze()
@@ -298,22 +298,24 @@ def train_model_gnn(
         if catalog_model.model_type == "gnn":
             model = gnn_torch(
                 nfeat=len(datagraph.x[0]),
-                nhid=hidden_size,  # da parametrizzare
-                nout=hidden_size,  # da parametrizzare
+                hid_list=hidden_list,
                 nclass=nclass,
                 dropout=0.0,
             )
         # per ora è la GAT
         else:
+            # forse definire hidden_list_att DA PARAMETRIZZARE
+            hidden_list_att = [31 for _ in range(8)]
             model = gat_torch(
                 nfeat=len(datagraph.x[0]),
-                nhid=hidden_size,  # da parametrizzare
+                hid_list_att=hidden_list_att,  # da parametrizzare
+                hid_list_conv=hidden_list,
                 nclass=nclass,
                 dropout=0.0,
                 alpha=0.2,
-                nheads=8,
+                nheads=len(hidden_list_att),
             )
-            #TODO: rendi dinamico nclass (2 per AML) 7 per Cora
+            # TODO: rendi dinamico nclass (2 per AML) 7 per Cora
 
         # training gnn
         _training_gnn_torch(
@@ -370,7 +372,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
 
         loss_train.backward()
 
-        #clip_grad_norm(model.parameters(), clip)
+        # clip_grad_norm(model.parameters(), clip)
         optimizer.step()
         print(
             "Epoch: {:04d}".format(epoch + 1),
