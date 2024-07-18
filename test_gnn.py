@@ -15,7 +15,7 @@ ml_model = MLModelCatalog(
 )
 
 training_params = {
-    "lr": 0.02,
+    "lr": 0.002,
     "epochs": 1000,
     "batch_size": 1024,
     "hidden_size": [31, 31, 31],
@@ -58,7 +58,7 @@ test_factual = data_testing(path_file)
 
 hyper_gnn = {
     "cf_optimizer": "Adadelta",
-    "lr": 0.5,
+    "lr": 0.005,
     "num_epochs": 1000,
     "hid_list": [31, 31, 31],
     "dropout": 0.0,

@@ -184,7 +184,7 @@ class GCNSyntheticPerturb(nn.Module):
                     x = F.dropout(x, self.dropout, training=self.training)
             cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers[-1](torch.cat(cat_list), dim=1)
+        x = self.layers[-1](torch.cat(cat_list, dim=1))
 
         """
         x1 = F.relu(self.gc1(x, norm_adj))
@@ -229,7 +229,7 @@ class GCNSyntheticPerturb(nn.Module):
                     x = F.dropout(x, self.dropout, training=self.training)
             cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers[-1](torch.cat(cat_list), dim=1)
+        x = self.layers[-1](torch.cat(cat_list, dim=1))
 
         """
 

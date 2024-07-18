@@ -400,7 +400,7 @@ class MLModelCatalog(MLModel):
                     self,
                     data=self.data,
                     lr=learning_rate,
-                    weight_decay=0.001,
+                    weight_decay=0,
                     epochs=epochs,
                     clip=2.0,
                     hidden_list=hidden_size,
