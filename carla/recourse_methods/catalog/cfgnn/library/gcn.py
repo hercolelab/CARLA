@@ -88,4 +88,4 @@ class GCNSynthetic(nn.Module):
         return F.log_softmax(x, dim=1)
 
     def loss(self, pred, label):
-        return F.nll_loss(pred, label)
+        return F.cross_entropy(pred, label)

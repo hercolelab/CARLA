@@ -190,9 +190,9 @@ class CFExplainer(RecourseMethod):
                 f"Node idx: {self.node_idx}",
                 f"New idx: {self.new_idx}",
                 "Epoch: {:04d}".format(epoch + 1),
-                "loss: {:.4f}".format(loss_total.item()),
-                "pred loss: {:.4f}".format(loss_pred.item()),
-                "graph loss: {:.4f}".format(loss_graph_dist.item()),
+                "loss: {:.7f}".format(loss_total.item()),
+                "pred loss: {:.7f}".format(loss_pred.item()),
+                "graph loss: {:.7f}".format(loss_graph_dist.item()),
             )
 
             print(
@@ -279,7 +279,7 @@ class CFExplainer(RecourseMethod):
             self.sub_adj = sub_adj
             self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
-            self.y_pred_orig = y_pred_orig[new_idx]
+            self.y_pred_orig = y_pred_orig[i]
 
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
@@ -340,7 +340,7 @@ class CFExplainer(RecourseMethod):
             # because of the subgraph
             cf_example = self.explain(
                 node_idx=i,
-                cf_optimizer=self.cf_optimizer,
+                cf_optimizer="Adadelta",
                 new_idx=new_idx,
                 lr=self.lr,
                 n_momentum=self.n_momentum,
