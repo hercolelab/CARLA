@@ -11,6 +11,7 @@ from torch import nn
 
 # from torch.nn.utils import clip_grad_norm
 from torch.utils.data import DataLoader, Dataset
+from torch_geometric.loader import NeighborLoader
 
 # from torch_geometric.utils import dense_to_sparse
 # from torch_geometric.utils.metric import accuracy
@@ -421,3 +422,150 @@ def _test(model, features, labels, norm_adj, idx_test):
 
 
 # %%
+
+
+def _training_gnn_torch_batch(
+    model, data_graph, learn_rate, weight_decay, epochs, clip
+):
+    # use GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+    train_loader = NeighborLoader(
+        data_graph,
+        num_neighbors=[30] * 2,
+        batch_size=256,
+        input_nodes=data_graph.train_mask,
+    )
+
+    test_loader = NeighborLoader(
+        data_graph,
+        num_neighbors=[30] * 2,
+        batch_size=256,
+        input_nodes=data_graph.test_mask,
+    )
+
+    labels = torch.tensor(data_graph.y, dtype=torch.long).squeeze().to(device)
+
+    metric = MulticlassAccuracy()
+    f1score = MulticlassF1Score(num_classes=len(labels))
+
+    # define optimizer
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=learn_rate, weight_decay=weight_decay
+    )
+
+    t_total = time.time()
+    for epoch in range(epochs):
+        t = time.time()
+        model.train()
+        for data in train_loader:
+            data.to(device)
+
+            adj = _create_adj_mat(data)
+            norm_adj = normalize_adj(adj).to(device)
+            features = torch.tensor(data.x).squeeze().to(device)
+            labels = torch.tensor(data.y, dtype=torch.long).squeeze().to(device)
+
+            node_idx = [i for i in range(0, len(data.y))]
+            idx_train = torch.masked_select(torch.Tensor(node_idx), data.train_mask)
+            idx_test = torch.masked_select(torch.Tensor(node_idx), data.test_mask)
+            idx_train = idx_train.type(torch.int64)
+            idx_test = idx_test.type(torch.int64)
+
+            features, norm_adj = features.to(device), norm_adj.to(device)
+            optimizer.zero_grad()
+            output = model(features, norm_adj)
+
+            loss_train = model.loss(output[idx_train], labels[idx_train])
+
+            y_pred = torch.argmax(output, dim=1)
+
+            acc_train = metric.update(y_pred[idx_train], labels[idx_train])
+            f1_train = f1score.update(y_pred[idx_train], labels[idx_train])
+
+            loss_train.backward()
+
+            # clip_grad_norm(model.parameters(), clip)
+            optimizer.step()
+            print(
+                "Epoch: {:04d}".format(epoch + 1),
+                "loss_train: {:.4f}".format(loss_train.item()),
+                "acc_train: {:.4f}".format(acc_train.compute()),
+                "f1_train: {:.4f}".format(f1_train.compute()),
+                "time: {:.4f}s".format(time.time() - t),
+            )
+
+    print("Optimization Finished!")
+    print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
+
+    # torch.save(model.state_dict(), "../models/gcn_3layer_{}".format(args.dataset) + ".pt")
+    y_pred = _test_batch(model, test_loader, labels, device)
+    print(
+        "y_true counts: {}".format(np.unique(labels.cpu().numpy(), return_counts=True))
+    )
+    print(
+        "y_pred_orig counts: {}".format(
+            np.unique(y_pred.cpu().numpy(), return_counts=True)
+        )
+    )
+    print("Finished training!")
+
+
+def _test_batch(model, test_model, labels, device):
+    # modalità di evaluation
+    model.eval()
+    metric = MulticlassAccuracy()
+    f1score = MulticlassF1Score(num_classes=len(labels))
+    for test_data in test_model:
+        test_data.to(device)
+
+        adj = _create_adj_mat(test_data)
+        norm_adj = normalize_adj(adj).to(device)
+        features = torch.tensor(test_data.x).squeeze().to(device)
+        labels = torch.tensor(test_data.y, dtype=torch.long).squeeze().to(device)
+
+        node_idx = [i for i in range(0, len(test_data.y))]
+        # idx_train = torch.masked_select(torch.Tensor(node_idx), test_data.train_mask)
+        idx_test = torch.masked_select(torch.Tensor(node_idx), test_data.test_mask)
+        # idx_train = idx_train.type(torch.int64)
+        idx_test = idx_test.type(torch.int64)
+
+        features, norm_adj = features.to(device), norm_adj.to(device)
+
+        output = model(features, norm_adj)
+        loss_test = F.nll_loss(output[idx_test], labels[idx_test])
+        y_pred = torch.argmax(output, dim=1)
+        acc_test = metric.update(y_pred[idx_test], labels[idx_test])
+        f1_test = f1score.update(y_pred[idx_test], labels[idx_test])
+        print(
+            "Test set results:",
+            "loss= {:.4f}".format(loss_test.item()),
+            "accuracy= {:.4f}".format(acc_test.compute()),
+            "f1-score= {:.4f}".format(f1_test.compute()),
+        )
+
+        print(
+            "y_true counts: {}".format(
+                np.unique(labels.cpu().numpy(), return_counts=True)
+            )
+        )
+        print(
+            "y_pred_orig counts: {}".format(
+                np.unique(y_pred.cpu().numpy(), return_counts=True)
+            )
+        )
+    return y_pred
+
+
+def _create_adj_mat(data_graph):
+    edges_index = data_graph.edge_index
+    row_indices = edges_index[0]
+    col_indices = edges_index[1]
+    values = torch.ones(len(edges_index[0]))  # valori tutti a uno
+    size = torch.Size([len(data_graph.x), len(data_graph.x)])
+    sparse_matrix = torch.sparse_coo_tensor(
+        torch.stack([row_indices, col_indices]), values, size=size
+    )
+    adj_matrix = sparse_matrix.to_dense()
+    return adj_matrix
