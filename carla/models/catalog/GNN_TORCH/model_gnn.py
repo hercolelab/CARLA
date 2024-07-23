@@ -71,7 +71,7 @@ class GCNSynthetic(nn.Module):
 
             current_dim = hids
 
-        self.layers.append(nn.Linear(sum(hid_list), nclass))
+        self.layers.append(nn.Linear(sum(hid_list), 1))
         self.dropout = dropout
 
     def forward(self, x, adj):
@@ -88,7 +88,8 @@ class GCNSynthetic(nn.Module):
         x = self.layers[-1](torch.cat(cat_list, dim=1))
 
         # x = self.lin(torch.cat((x1, x2, x3), dim=1)) da vedere
-        return F.log_softmax(x, dim=1)
+        # return F.log_softmax(x, dim=1)
+        return F.sigmoid(x)
 
     def loss(self, pred, label):
         return F.cross_entropy(pred, label)

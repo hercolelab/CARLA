@@ -132,16 +132,19 @@ def create_adj_matrix(data_graph, values_edges):
 def get_degree_matrix(adj):
     return torch.diag(sum(adj))
 
-
 def normalize_adj(adj):
+    """
+    Normalize adjacency matrix using the reparameterization trick from the GCN paper.
+    """
+    # Add self-loops to the adjacency matrix
+    A_tilde = adj + torch.eye(adj.size(0), device=adj.device)
 
-    # Normalize adjacancy matrix according to reparam trick in GCN paper
-    A_tilde = adj + torch.eye(adj.shape[0])
-    D_tilde = get_degree_matrix(A_tilde)
-    # Raise to power -1/2, set all infs to 0s
-    D_tilde_exp = D_tilde ** (-1 / 2)
-    D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+    # Compute the degree matrix and its inverse square root
+    D_tilde = torch.pow(get_degree_matrix(A_tilde), -0.5)
+    D_tilde[torch.isinf(D_tilde)] = 0  # Set inf values to 0
 
-    # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-    norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+    # Compute the normalized adjacency matrix
+    norm_adj = D_tilde @ A_tilde @ D_tilde
+
     return norm_adj
+
