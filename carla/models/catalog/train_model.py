@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 
 # from torch_geometric.utils import dense_to_sparse
 # from torch_geometric.utils.metric import accuracy
-from torcheval.metrics import MulticlassAccuracy
+from torcheval.metrics import MulticlassAccuracy, MulticlassF1Score
 
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 from carla.models.catalog.ANN_TF import AnnModel
@@ -350,6 +350,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
     idx_test = idx_test.type(torch.int64)
 
     metric = MulticlassAccuracy()
+    f1score = MulticlassF1Score(num_classes=len(labels))
 
     # define optimizer
     optimizer = torch.optim.Adam(
@@ -369,6 +370,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
         y_pred = torch.argmax(output, dim=1)
 
         acc_train = metric.update(y_pred[idx_train], labels[idx_train])
+        f1_train = f1score.update(y_pred[idx_train], labels[idx_train])
 
         loss_train.backward()
 
@@ -378,6 +380,7 @@ def _training_gnn_torch(model, data_graph, adj, learn_rate, weight_decay, epochs
             "Epoch: {:04d}".format(epoch + 1),
             "loss_train: {:.4f}".format(loss_train.item()),
             "acc_train: {:.4f}".format(acc_train.compute()),
+            "f1_train: {:.4f}".format(f1_train.compute()),
             "time: {:.4f}s".format(time.time() - t),
         )
 
@@ -401,14 +404,18 @@ def _test(model, features, labels, norm_adj, idx_test):
     # modalità di evaluation
     model.eval()
     metric = MulticlassAccuracy()
+    f1score = MulticlassF1Score(num_classes=len(labels))
+
     output = model(features, norm_adj)
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
     y_pred = torch.argmax(output, dim=1)
     acc_test = metric.update(y_pred[idx_test], labels[idx_test])
+    f1_test = f1score.update(y_pred[idx_test], labels[idx_test])
     print(
         "Test set results:",
         "loss= {:.4f}".format(loss_test.item()),
         "accuracy= {:.4f}".format(acc_test.compute()),
+        "f1-score= {:.4f}".format(f1_test.compute()),
     )
     return y_pred
 

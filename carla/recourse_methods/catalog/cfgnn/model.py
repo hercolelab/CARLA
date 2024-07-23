@@ -224,7 +224,7 @@ class CFExplainer(RecourseMethod):
         return (cf_stats, loss_total.item())
 
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
-        df_test_plat = None
+        # df_test_plat = None
         plat = ["Cora", "CiteSeer", "PubMed"]
         if isinstance(factuals, str) and factuals in plat:
             df_test_plat = PlanetoidGraph(factuals)
