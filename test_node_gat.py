@@ -8,56 +8,26 @@ path_file = "/home/hl-turing/VSCodeProjects/Flavio/CARLA/data/AML_Laund_Clean.cs
 # Data
 dataset = AMLtoGraph(path_file)
 
-# Model
-
-#model_type = "gin"
-#hidden_size = [50,50,]
-
-model_type = 'gin'
-hidden_size = [100]
+model_type = 'gat_coo'
+hidden_size = [100,100]
+hidden_list_conv = [50,50]
 
 ml_model = MLModelCatalog(
     data=dataset, model_type=model_type, load_online=False, backend="pytorch"
 )
 
 training_params = {
-    "lr": 0.001,
-    "epochs": 250,
-    "batch_size": 732,
+    "lr": 0.002,
+    "epochs": 300,
+    "batch_size": 1028,
     "hidden_size": hidden_size,
-    "hidden_size_conv": [100,100],
-    "clip": 2.0,
-    
-    "alpha": None,
-    "nheads": 3,
-    "neigh": [31,31,31]
-    
-    
-}
-
-'''
-model_type = 'gnn'
-hidden_size = [100,100,100,100]
-
-ml_model = MLModelCatalog(
-    data=dataset, model_type=model_type, load_online=False, backend="pytorch"
-)
-
-training_params = {
-    "lr": 0.001,
-    "epochs": 1500,
-    "batch_size": 878,
-    "hidden_size": hidden_size,
-    "hidden_size_conv": None,
+    "hidden_size_conv": hidden_list_conv,
     "clip": 1.0,
     
-    "alpha": None,
-    "nheads": 8,
-    "neigh": [100]
-    
-    
+    "alpha": 0.2,
+    "nheads": 4,
+    "neigh": [100,100,100]
 }
-'''
 
 ml_model.train(
     learning_rate=training_params["lr"],
@@ -72,12 +42,11 @@ ml_model.train(
     
 )
 
-
 def data_testing(path):
 
     dataset = pd.read_csv(path)
 
-    idx = [i for i in range(int(len(dataset) * 0.3))]
+    idx = [i for i in range(int(len(dataset) * 0.15))]
     test_set = dataset.iloc[idx]
     # test_set = dataset.sample(frac=percentuale_training, random_state=42)
     return test_set
@@ -112,13 +81,14 @@ hyper_gnn = {
     "n_momentum": 0,
     "verbose": True,
     "device": "cuda",
+    "model_type": "gnn"
 }
 
 hyper_gat = {
     "cf_optimizer": "Adadelta",
     "lr": 0.5,
-    "num_epochs": 1000,
-    "hid_attr_list": [31, 31, 31, 31, 31, 31, 31, 31],
+    "num_epochs": 2000,
+    "hid_attr_list": [30, 30, 30, 30, 30, 30, 30, 30],
     "hid_list": hidden_size,
     "dropout": 0.0,
     "alpha": 0.2,
@@ -129,14 +99,15 @@ hyper_gat = {
     "n_momentum": 0,
     "verbose": True,
     "device": "cuda",
+    "model_type": model_type
 }
 
 hyper_gin = {
     "cf_optimizer": "Adadelta",
     "lr": 0.5,
     "num_epochs": 1500,
-    "hid_attr_list": hidden_size,
-    "hid_list": [100, 100],
+    "hid_attr_list": [100],
+    "hid_list": hidden_size,
     "dropout": 0.0,
     "alpha": 0.2,
     "beta": 0.5,
@@ -146,20 +117,34 @@ hyper_gin = {
     "n_momentum": 0,
     "verbose": True,
     "device": "cuda",
+    "model_type": model_type
 }
 
 if model_type == "gnn":
-    recourse_method = recourse_catalog.CFExplainer(
-    mlmodel=ml_model, data=dataset, hyperparams=hyper_gnn)
+    recourse_method = recourse_catalog.CFNodeExplainer(
+        mlmodel=ml_model, data=dataset, hyperparams=hyper_gnn
+        )
 
-elif model_type == "gin":
-    recourse_method = recourse_catalog.CFGINExplainer(
-    mlmodel=ml_model, data=dataset, hyperparams=hyper_gin)
+    df_cfs_gnn, num_cf_gnn, validity_gnn, sparsity_gnn, fidelity_acc_gnn, fidelity_prob_gnn = recourse_method.get_counterfactuals(test_factual)
+
+
+    print(f"{df_cfs_gnn=}")
+    print(f"{num_cf_gnn=}")
+    print(f"{sparsity_gnn=}")
+    print(f"{validity_gnn=}")
+    print(f"{fidelity_acc_gnn=}")
+    print(f"{fidelity_prob_gnn=}")
+
 else:
-    recourse_method = recourse_catalog.CFGATExplainer(
-     mlmodel=ml_model, data=dataset, hyperparams=hyper_gat)
+    recourse_method = recourse_catalog.CFNodeExplainer(
+        mlmodel=ml_model, data=dataset, hyperparams=hyper_gin
+        )
 
-df_cfs = recourse_method.get_counterfactuals(test_factual)
+    df_cfs, num_cf, validity, sparsity, fidelity = recourse_method.get_counterfactuals(test_factual)
 
 
-print(f"{df_cfs=}")
+    print(f"{df_cfs=}")
+    print(f"{num_cf=}")
+    print(f"{sparsity=}")
+    print(f"{validity=}")
+    print(f"{fidelity=}")

@@ -5,6 +5,9 @@ from .cchvae import CCHVAE
 from .cem import CEM
 from .cfgnn import CFExplainer
 from .cfgat import CFGATExplainer
+from .cfgin import CFGINExplainer
+from .nodeperturbgnn import CFNodeExplainer
+from .edgeperturbergnn import CFEdgeExplainer
 from .clue import Clue
 from .crud import CRUD
 from .dice import Dice

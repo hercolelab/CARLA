@@ -205,9 +205,9 @@ class GATSyntheticPerturb(nn.Module):
         # Dynamic attentions
         self.attentions = [
             GraphAttentionLayer(
-                nfeat, hid_list_att, dropout=dropout, alpha=alpha, concat=True
+                nfeat, hid_list_att[i], dropout=dropout, alpha=alpha, concat=True
             )
-            for _ in range(nheads)
+            for i in range(nheads)
         ]
         for i, attention in enumerate(self.attentions):
             self.add_module("attention_{}".format(i), attention)
@@ -239,8 +239,12 @@ class GATSyntheticPerturb(nn.Module):
             current_dim = hids
             i += 1
 
-        self.layers_conv.append(nn.Linear(sum(hid_list), nclass))
-
+        if self.nclass <= 1:
+            self.layers_conv.append(nn.Linear(sum(hid_list), 1))
+        # multiclass
+        else:
+            self.layers_conv.append(nn.Linear(sum(hid_list), self.nclass))
+        self.dropout = dropout
         """
 
         self.attentions = [
@@ -322,9 +326,13 @@ class GATSyntheticPerturb(nn.Module):
                     x = F.dropout(x, self.dropout, training=self.training)
             cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers_conv[-1](torch.cat(cat_list), dim=1)
+        x = self.layers_conv[-1](torch.cat(cat_list, dim=1))
 
-        return F.log_softmax(x, dim=1)
+        if self.nclass <= 1:
+            return F.sigmoid(x)
+        # multiclass
+        else:
+            return F.log_softmax(x, dim=1)
 
     def forward_prediction(self, x):
         """ """
@@ -364,14 +372,21 @@ class GATSyntheticPerturb(nn.Module):
                     x = F.dropout(x, self.dropout, training=self.training)
             cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers_conv[-1](torch.cat(cat_list), dim=1)
+        x = self.layers_conv[-1](torch.cat(cat_list, dim=1))
 
-        return F.log_softmax(x, dim=1), self.P
+        if self.nclass <= 1:
+            return F.sigmoid(x), self.P
+        # multiclass
+        else:
+            return F.log_softmax(x, dim=1), self.P
+        # return F.log_softmax(x, dim=1), self.P
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         """ """
         device = "cuda" if torch.cuda.is_available() else "cpu"
         pred_same = (y_pred_new_actual == y_pred_orig).float()
+        if pred_same == 1.0:
+            print('sono entrato')
 
         # Need dim >=2 for F.nll_loss to work
         output = output.unsqueeze(0)
@@ -386,7 +401,10 @@ class GATSyntheticPerturb(nn.Module):
         )
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = F.cross_entropy(output, (y_pred_orig + 1) % 2)
+        if self.nclass <= 1:
+            loss_pred = -F.binary_cross_entropy(output.float(), y_pred_orig.float())
+        else:
+            loss_pred = -F.nll_loss(output, y_pred_orig)
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)

@@ -139,3 +139,9 @@ dmypy.json
 
 # test results
 *.html
+*.csv
+*.json
+*.wandb
+*.txt
+*.yaml
+*.png

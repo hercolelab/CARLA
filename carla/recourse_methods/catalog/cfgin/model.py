@@ -24,15 +24,15 @@ from carla.data.catalog.online_catalog import DataCatalog
 
 # from carla.models.api import MLModel
 # commento
-from carla.models.catalog.GAT_TORCH.model_gat import GAT
+from carla.models.catalog.GIN_TORCH.model_gin import GIN
 from carla.recourse_methods.api import RecourseMethod
 from carla.recourse_methods.processing import merge_default_parameters
 
-from .library.gat_perturb import GATSyntheticPerturb
+from .library.gin_perturb import GINSyntheticPerturb
 from .library.utils import get_degree_matrix, get_neighbourhood, normalize_adj
 
 
-class CFGATExplainer(RecourseMethod):
+class CFGINExplainer(RecourseMethod):
     """
     Code adapted from: CF-GNNExplainer: Counterfactual Explanations for Graph Neural Networks
     Link ArXiv: https://arxiv.org/abs/2102.03322
@@ -78,7 +78,7 @@ class CFGATExplainer(RecourseMethod):
         "device": "cpu",
     }
 
-    def __init__(self, mlmodel: GAT, data: DataCatalog, hyperparams: Dict = None):
+    def __init__(self, mlmodel: GIN, data: DataCatalog, hyperparams: Dict = None):
 
         supported_backends = ["pytorch"]
         if mlmodel.backend not in supported_backends:
@@ -86,7 +86,7 @@ class CFGATExplainer(RecourseMethod):
                 f"{mlmodel.backend} is not in supported backends {supported_backends}"
             )
 
-        super(CFGATExplainer, self).__init__(mlmodel=mlmodel)
+        super(CFGINExplainer, self).__init__(mlmodel=mlmodel)
         self.data = data
         self.mlmodel = mlmodel
         self._params = merge_default_parameters(hyperparams, self._DEFAULT_HYPERPARAMS)
@@ -157,9 +157,11 @@ class CFGATExplainer(RecourseMethod):
             new_example, loss_total = self.train(epoch)
 
             if new_example != [] and loss_total < best_loss:
-                best_cf_example.append(new_example)
-                best_loss = loss_total
-                num_cf_examples += 1
+                if (np.sum(new_example[2]!=new_example[3]) != 0):
+                    
+                    best_cf_example.append(new_example)
+                    best_loss = loss_total
+                    num_cf_examples += 1
 
         if verbose:
             print(f"{num_cf_examples} CF examples for node_idx = {self.node_idx}\n")
@@ -185,13 +187,13 @@ class CFGATExplainer(RecourseMethod):
         output_actual, self.P = self.cf_model.forward_prediction(self.x)
 
         # Need to use new_idx from now on since sub_adj is reindexed
-        y_pred_new = torch.argmax(output[self.new_idx])
-        y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
+        y_pred_new = torch.argmax(output.squeeze()[self.new_idx])
+        y_pred_new_actual = torch.argmax(output_actual.squeeze()[self.new_idx])
 
         # compute the loss function and perform optim step
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
         loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
-            output[self.new_idx], self.y_pred_orig, y_pred_new_actual
+            output.squeeze()[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
@@ -209,8 +211,8 @@ class CFGATExplainer(RecourseMethod):
             )
 
             print(
-                f"Output: {output[self.new_idx].data}\n",
-                f"Output nondiff: {output_actual[self.new_idx].data}\n",
+                f"Output: {output.squeeze()[self.new_idx].data}\n",
+                f"Output nondiff: {output_actual.squeeze()[self.new_idx].data}\n",
                 f"orig pred: {self.y_pred_orig}, new pred: {y_pred_new}, new pred nondiff: {y_pred_new_actual}\n",
             )
 
@@ -270,8 +272,8 @@ class CFGATExplainer(RecourseMethod):
         )  # According to reparam trick from GCN paper
 
         # output of GCN Syntethic model
-        y_pred_orig = self.mlmodel.predict_gnn(features, norm_adj)
-        # y_pred_orig = torch.argmax(output, dim=1)
+        output = self.mlmodel.predict_proba_gnn(features, norm_adj).squeeze()
+        y_pred_orig = torch.argmax(output, dim=1)
         # print(torch.max(y_pred_orig))
         # Get CF examples in test set
         test_cf_examples = []
@@ -298,9 +300,9 @@ class CFGATExplainer(RecourseMethod):
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
             # and train the perturbation matrix to change the prediction
-            self.cf_model = GATSyntheticPerturb(
+            self.cf_model = GINSyntheticPerturb(
                 nfeat=self.sub_feat.shape[1],
-                hid_list_att=self.hid_attr_list,
+                hid_list_gin=self.hid_attr_list,
                 hid_list_conv=self.hid_list,
                 nclass=self.num_classes,
                 adj=self.sub_adj,
@@ -345,7 +347,7 @@ class CFGATExplainer(RecourseMethod):
                 with torch.no_grad():
                     print(f"Output original model, full adj: {y_pred_orig[i]}")
                     print(
-                        f"Output original model, sub adj: {self.mlmodel.predict_proba_gnn(sub_feat, normalize_adj(sub_adj).to(self.device))[new_idx]}"
+                        f"Output original model, sub adj: {self.mlmodel.predict_proba_gnn(sub_feat, normalize_adj(sub_adj).to(self.device)).squeeze()[new_idx]}"
                     )
 
             # If cuda is avaialble move the computation on GPU
@@ -372,7 +374,7 @@ class CFGATExplainer(RecourseMethod):
             )
             if len(cf_example) == 0:
                 continue
-            one_cf_example = cf_example[0]
+            one_cf_example = cf_example[-1]
             test_cf_sts.append(one_cf_example)
 
             # cf_example = [ [cf_example0], [cf_example1], [cf_example2], etc...]
@@ -380,7 +382,7 @@ class CFGATExplainer(RecourseMethod):
             # da trasformare cf_example (DataGraph) in DataFrame (utilizzando forse diz_conn)
 
             # prendo da cf_example cf_adj
-            cf_adj = cf_example[0][2]  # dovrei iterare (?)
+            cf_adj = one_cf_example[2]  # dovrei iterare (?)
 
             try:
                 pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)

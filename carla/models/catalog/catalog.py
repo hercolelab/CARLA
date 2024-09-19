@@ -314,6 +314,12 @@ class MLModelCatalog(MLModel):
 
         return torch.argmax(self._model(x.to(self.device), adj.to(self.device)), dim=1)
 
+    def predict_proba_gnn_coo(self, x, edge_index, edge_attr):
+        return self._model(x.to(self.device), edge_index.to(self.device), edge_attr.to(self.device))
+    
+    def predict_gnn_coo(self, x, edge_index, edge_attr):
+        return torch.argmax(self._model(x.to(self.device), edge_index.to(self.device), edge_attr.to(self.device)), dim=1)
+
     @property
     def tree_iterator(self):
         """
@@ -342,6 +348,11 @@ class MLModelCatalog(MLModel):
         batch_size=None,
         force_train=False,
         hidden_size=[31, 31, 31],
+        hidden_conv= [31, 31, 31],
+        clip = 2.0,
+        alpha = 0.2,
+        nheads = 8,
+        neig = [31,31,31],
         n_estimators=5,
         max_depth=5,
     ):
@@ -377,6 +388,16 @@ class MLModelCatalog(MLModel):
             save_name = f"{self.model_type}_layers_{layer_string}"
         elif self.model_type == "gat":
             save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gin":
+            save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gnn_coo":
+            save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gat_coo":
+            save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gin_coo":
+            save_name = f"{self.model_type}_layers_{layer_string}"
+        elif self.model_type == "gUnet_coo":
+            save_name = f"{self.model_type}_layers_{layer_string}"        
 
         else:
             raise NotImplementedError("Model type not supported:", self.model_type)
@@ -390,20 +411,33 @@ class MLModelCatalog(MLModel):
 
             # sanity check to see if loaded model accuracy makes sense
             if self._model is not None:
-                if not (self._model_type == "gnn" or self._model_type == "gat"):
+                if not (self._model_type == "gnn" or 
+                        self._model_type == "gat" or 
+                        self._model_type == "gin" or 
+                        self._model_type == "gat_coo" or
+                        self._model_type == "gnn_coo" or
+                        self._model_type == "gin_coo" or
+                        self._model_type == "gUnet_coo"):
                     self._test_accuracy()
 
         # if model loading failed or force_train flag set to true.
         if self._model is None or force_train:
-            if self._model_type == "gnn" or self._model_type == "gat":
+            if (self._model_type == "gnn" or self._model_type == "gat" or self._model_type == "gin" 
+                or self._model_type == "gat_coo" or self._model_type == "gnn_coo" 
+                or self._model_type == "gin_coo" or self._model_type == "gUnet_coo"):
                 self._model = train_model_gnn(
                     self,
                     data=self.data,
                     lr=learning_rate,
                     weight_decay=0,
                     epochs=epochs,
-                    clip=2.0,
+                    clip=clip,
                     hidden_list=hidden_size,
+                    hidden_list_conv = hidden_conv,
+                    alpha=alpha,
+                    nheads=nheads,
+                    batch=batch_size,
+                    neig=neig
                 )
 
             else:

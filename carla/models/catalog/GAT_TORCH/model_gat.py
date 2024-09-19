@@ -5,8 +5,93 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+from torch_geometric.nn.dense import DenseGATConv, DenseGCNConv
 
 
+class GAT(nn.Module):
+    def __init__(
+        self, nfeat, hid_list_att, hid_list_conv, nclass, dropout, alpha, nheads
+    ):
+        """Dense version of GAT."""
+        super(GAT, self).__init__()
+        self.nclass = nclass
+        self.layers_conv: nn.ModuleList = nn.ModuleList()
+        self.use_dropout = dropout > 0.0
+        current_dim = nfeat
+        i=0
+        # hid_list_att = hid_list_att[1:]
+        for hids in hid_list_att:
+            
+            if i==0:
+                self.layers_conv.append(
+                    DenseGATConv(in_channels=nfeat, out_channels= hids, heads=nheads, dropout=dropout, negative_slope= alpha, concat=True)
+                )
+            
+            else:
+                self.layers_conv.append(
+                    DenseGATConv(in_channels=current_dim * nheads, out_channels= hids, heads=nheads, dropout=dropout, negative_slope= alpha, concat=True)
+                )
+            current_dim = hids
+            i+=1
+
+
+        current_dim = hid_list_att[-1] * nheads
+        # hid_list_conv = hid_list_conv[1:]
+        for hids in hid_list_conv:
+            self.layers_conv.append(
+                DenseGCNConv(in_channels=current_dim, out_channels=hids)
+            )
+
+            current_dim = hids
+        
+        if self.nclass <= 1:
+            self.layers_conv.append(nn.Linear(current_dim, 1))
+        # multiclass
+        else:
+            # self.lin = nn.Linear(current_dim, self.nclass)
+            self.layers_conv.append(nn.Linear(current_dim, self.nclass))
+        
+
+    def forward(self, x, adj):
+        # dynamic conv
+        for layer in self.layers_conv:
+            
+            if isinstance(layer, DenseGCNConv):
+                x = layer(x, adj)
+                x = F.relu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+
+            # enter if it is type GATConv
+            elif isinstance(layer, DenseGATConv):
+                x = layer(x, adj)
+                x = F.elu(x)
+                if self.use_dropout:
+                    x = F.dropout(x, self.dropout, training=self.training)
+
+            else:
+                x = layer(x)
+            # cat_list.append(x)
+        # No activation function for the output layer (assuming classification task)
+        # x = self.layers_conv[-1](torch.cat(cat_list, dim=1))
+
+        if self.nclass <= 1:
+            return F.sigmoid(x)
+        # multiclass
+        else:
+            return F.log_softmax(x, dim=1)
+
+    def loss(self, pred, label):
+        if self.nclass <= 1:
+            return F.binary_cross_entropy(pred, label)
+        # multiclass
+        else:
+            return F.nll_loss(pred, label)
+        # return F.nll_loss(pred, label)
+
+
+
+'''
 class GraphConvolution(nn.Module):
     """
     Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
@@ -61,6 +146,7 @@ class GraphAttentionLayer(nn.Module):
         self.alpha = alpha
         self.concat = concat
 
+        # print(out_features)
         self.W = nn.Parameter(torch.empty(size=(in_features, out_features)))
         nn.init.xavier_uniform_(self.W.data, gain=1.414)
         self.a = nn.Parameter(torch.empty(size=(2 * out_features, 1)))
@@ -114,13 +200,14 @@ class GAT(nn.Module):
         """Dense version of GAT."""
         super(GAT, self).__init__()
         self.dropout = dropout
-
+        self.nclass = nclass
+        
         # Dynamic attentions
         self.attentions = [
             GraphAttentionLayer(
-                nfeat, hid_list_att, dropout=dropout, alpha=alpha, concat=True
+                nfeat, hid_list_att[i], dropout=dropout, alpha=alpha, concat=True
             )
-            for _ in range(nheads)
+            for i in range(nheads)
         ]
         for i, attention in enumerate(self.attentions):
             self.add_module("attention_{}".format(i), attention)
@@ -146,9 +233,14 @@ class GAT(nn.Module):
 
             current_dim = hids
 
-        self.layers_conv.append(nn.Linear(sum(hid_list), nclass))
-
-        # TODO: make it dynamic!
+        if self.nclass <= 1:
+            # self.layers_conv.append(nn.Linear(sum(hid_list), 1))
+            self.layers_conv.append(nn.Linear(current_dim, 1))
+        # multiclass
+        else:
+            # self.layers_conv.append(nn.Linear(sum(hid_list), self.nclass))
+            self.layers_conv.append(nn.Linear(current_dim, self.nclass))
+        self.dropout = dropout
 
     def forward(self, x, adj):
         # x = F.dropout(x, self.dropout, training=self.training)
@@ -156,54 +248,32 @@ class GAT(nn.Module):
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.elu(self.out_att(x, adj))
 
-        cat_list = []
+        # cat_list = []
         # dynamic conv
-        for layer in self.layers_conv[:-1]:
-            x = layer(x, adj)
+        for layer in self.layers_conv:
             if isinstance(layer, GraphConvolution):
+                x = layer(x, adj)
                 x = F.relu(x)
                 if self.use_dropout:
                     x = F.dropout(x, self.dropout, training=self.training)
-            cat_list.append(x)
+            else:
+                x = layer(x)
+            # cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers[-1](torch.cat(cat_list), dim=1)
-        return F.log_softmax(x, dim=1)
+        # x = self.layers_conv[-1](torch.cat(cat_list, dim=1))
+
+        if self.nclass <= 1:
+            return F.sigmoid(x)
+        # multiclass
+        else:
+            return F.log_softmax(x, dim=1)
 
     def loss(self, pred, label):
-        return F.nll_loss(pred, label)
-
-
+        if self.nclass <= 1:
+            return F.binary_cross_entropy(pred, label)
+        # multiclass
+        else:
+            return F.nll_loss(pred, label)
+        # return F.nll_loss(pred, label)
 '''
-class GAT(nn.Module):
-    def __init__(self, nfeat, nhid, nclass, dropout, alpha, nheads):
-        """Dense version of GAT."""
-        super(GAT, self).__init__()
-        self.dropout = dropout
 
-        self.attentions = [
-            GraphAttentionLayer(nfeat, nhid, dropout=dropout, alpha=alpha, concat=True)
-            for _ in range(nheads)
-        ]
-        for i, attention in enumerate(self.attentions):
-            self.add_module("attention_{}".format(i), attention)
-
-        self.out_att = GraphAttentionLayer(
-            nhid * nheads, 50, dropout=dropout, alpha=alpha, concat=False
-        )
-
-
-        self.gcn = GraphConvolution(50, nclass)
-        # TODO: make it dynamic!
-
-    def forward(self, x, adj):
-        # x = F.dropout(x, self.dropout, training=self.training)
-        x = torch.cat([att(x, adj) for att in self.attentions], dim=1)
-        # x = F.dropout(x, self.dropout, training=self.training)
-        x = F.elu(self.out_att(x, adj))
-        x = self.gcn(x, adj)
-
-        return F.log_softmax(x, dim=1)
-
-    def loss(self, pred, label):
-        return F.nll_loss(pred, label)
-'''

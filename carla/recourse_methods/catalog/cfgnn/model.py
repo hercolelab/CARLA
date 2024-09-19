@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-# from torch.nn.utils import clip_grad_norm
+from torch.nn.utils import clip_grad_norm_
 from torch_geometric.utils import dense_to_sparse
 
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
@@ -177,11 +177,13 @@ class CFExplainer(RecourseMethod):
 
         # compute the loss function and perform optim step
         # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
+        # print(self.y_pred_orig.float())
+        # print(y_pred_new_actual.float())
         loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
             output[self.new_idx], self.y_pred_orig, y_pred_new_actual
         )
         loss_total.backward()
-        # clip_grad_norm(self.cf_model.parameters(), 2.0)
+        clip_grad_norm_(self.cf_model.parameters(), 1.0)
         self.cf_optimizer.step()
 
         if verbose:
@@ -226,6 +228,7 @@ class CFExplainer(RecourseMethod):
     def get_counterfactuals(self, factuals: Union[str, pd.DataFrame]):
         # df_test_plat = None
         plat = ["Cora", "CiteSeer", "PubMed"]
+        df_test_plat = None
         if isinstance(factuals, str) and factuals in plat:
             df_test_plat = PlanetoidGraph(factuals)
         else:
@@ -243,7 +246,7 @@ class CFExplainer(RecourseMethod):
             data_graph
         ).squeeze()  # Does not include self loops
         features = torch.tensor(data_graph.x).squeeze().to(self.device)
-        labels = torch.tensor(data_graph.y).squeeze().to(self.device)
+        labels = torch.tensor(data_graph.y).squeeze().long().to(self.device)
         # idx_train  # non dovrebbe servire
 
         node_idx = [i for i in range(0, len(data_graph.y))]

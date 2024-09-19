@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Union
 import pandas as pd
 import torch
 from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid
 from torch_geometric.utils import dense_to_sparse
@@ -126,7 +127,8 @@ class AMLtoGraph(DataCatalog):
     def __init__(self, data_table: Union[str, pd.DataFrame]):
         self._data_table = data_table
         self.name = "AML"
-
+        self.scaler_nodes = StandardScaler()
+        self.scaler_edges = StandardScaler()
         # preso da Online Catalog
         # aggiungere in data_catalog.yaml AML
         catalog_content = ["continuous", "categorical", "immutable", "target"]
@@ -137,6 +139,8 @@ class AMLtoGraph(DataCatalog):
         for key in ["continuous", "categorical", "immutable"]:
             if self.catalog[key] is None:
                 self.catalog[key] = []
+                
+            
 
     @property
     def categorical(self) -> List[str]:
@@ -177,8 +181,8 @@ class AMLtoGraph(DataCatalog):
             df["Timestamp"].max() - df["Timestamp"].min()
         )
 
-        df["Account"] = df["From Bank"].astype(str) + "_" + df["Account"]
-        df["Account1"] = df["To Bank"].astype(str) + "_" + df["Account1"]
+        df["Account"] = df["From Bank"].astype(str) + "_" + df["Account"].astype(str)
+        df["Account1"] = df["To Bank"].astype(str) + "_" + df["Account1"].astype(str)
         df = df.sort_values(by=["Account"])
         receiving_df = df[["Account1", "Amount Received", "Receiving Currency"]]
         paying_df = df[["Account", "Amount Paid", "Payment Currency"]]
@@ -244,12 +248,14 @@ class AMLtoGraph(DataCatalog):
             [torch.from_numpy(df["From"].values), torch.from_numpy(df["To"].values)],
             dim=0,
         )
-
-        # df = df.drop(["Is Laundering", "From", "To"], axis=1)
-        df = df.drop(["Is Laundering"], axis=1)
-
+        df_from_to = df[["From", "To"]]
+        df = df.drop(["Is Laundering", "From", "To"], axis=1)
+        # df = df.drop(["Is Laundering"], axis=1)
+        # df = (df - df.mean()) / df.std()
+        df = pd.DataFrame(self.scaler_edges.fit_transform(df), columns=df.columns)
+        # df = pd.concat([df, df_from_to], axis= 1)
         edge_attr = torch.from_numpy(df.values).to(torch.float)
-        return edge_attr, edge_index
+        return edge_attr, edge_index, mapping_dict
 
     def get_node_attr(self, currency_ls, paying_df, receiving_df, accounts):
         node_df = self.paid_currency_aggregate(currency_ls, paying_df, accounts)
@@ -257,6 +263,8 @@ class AMLtoGraph(DataCatalog):
         node_label = torch.from_numpy(node_df["Is Laundering"].values).to(torch.float)
         node_df = node_df.drop(["Account", "Is Laundering"], axis=1)
         node_df = self.df_label_encoder(node_df, ["Bank"])
+        # node_df = (node_df - node_df.mean()) / node_df.std()
+        node_df = pd.DataFrame(self.scaler_nodes.fit_transform(node_df), columns=node_df.columns)
         node_df = torch.from_numpy(node_df.values).to(torch.float)
         return node_df, node_label
 
@@ -283,24 +291,29 @@ class AMLtoGraph(DataCatalog):
         if isinstance(self._data_table, str):
             # csv path
             df = pd.read_csv(self._data_table)
-            df = df.iloc[: int(len(df) * 0.5)]
+            # df = df.iloc[: int(len(df) * 0.8)]
         else:
             # dataframe
             df = self._data_table
-
+            
+        if 'Unnamed: 0' in df.columns:
+            df = df.drop(columns=['Unnamed: 0'])
+        
+        df = df.drop_duplicates()
+        
         df, receiving_df, paying_df, currency_ls = self.preprocess(df)
         accounts = self.get_all_account(df)
         node_attr, node_label = self.get_node_attr(
             currency_ls, paying_df, receiving_df, accounts
         )
-        edge_attr, edge_index = self.get_edge_df(accounts, df)
+        self.edge_attr, self.edge_index, self.mapping_dict = self.get_edge_df(accounts, df)
         train_mask, test_mask = self.create_mask(len(node_attr))
 
         data = Data(
             x=node_attr,
-            edge_index=edge_index,
+            edge_index=self.edge_index,
             y=node_label,
-            edge_attr=edge_attr,
+            edge_attr=self.edge_attr,
             train_mask=train_mask,
             test_mask=test_mask,
         )
@@ -321,14 +334,35 @@ class AMLtoGraph(DataCatalog):
     def get_feat_node(self, dataGraph, norm_edge_index, node_dict):
         done = []
         array_data = []
+
         for i, arr in enumerate(norm_edge_index[0]):
             for j, elem in enumerate(arr):
                 if int(elem) not in done:
+                    original_acc = None
+                    original_acc2 = None
                     for key, value in node_dict.items():
                         if value == int(elem):
-                            array_data.append([key] + list(dataGraph.x[key].numpy()))
-                            done.append(int(elem))
+                            for orig, m in self.mapping_dict.items():
+                                if m == key:
+                                    original_acc = orig
+                                    break
+                        elif original_acc!=None:
                             break
+                        
+                                
+                    for key2, value2 in node_dict.items():
+                        if value2 == int(norm_edge_index[0][1][j]):
+                            for orig2, n in self.mapping_dict.items():
+                                if n == key2:
+                                    original_acc2 = orig2
+                                    break                     
+                            try:
+                                array_data.append([original_acc] + list(dataGraph.x[value].cpu().numpy()) + [original_acc2] +[int(dataGraph.y[j])] )
+                                done.append(int(elem))
+                                break
+                            except IndexError:
+                                UserWarning(f"out of range with edge_index: is out of bounds for dimension")
+                                break
         return array_data
 
     def get_feat_edges(self, dataGraph, norm_edge_index, node_dict):
@@ -360,11 +394,11 @@ class AMLtoGraph(DataCatalog):
 
         array_attr_edge = []
         for i in index_corr:
-            array_attr_edge.append(list(orig_edge_attr[i].numpy()))
+            array_attr_edge.append(list(orig_edge_attr[i].cpu().numpy()))
 
         return array_attr_edge
 
-    def reconstruct_Tabular(self, dataGraph, adj_matrix, node_dict):
+    def reconstruct_Tabular(self, dataGraph, adj_matrix, node_dict, idx):
         columns_name_node = [
             "Account",
             "Bank",
@@ -398,6 +432,8 @@ class AMLtoGraph(DataCatalog):
             "avg received 12",
             "avg received 13",
             "avg received 14",
+            "Account1",
+            "Is Laundering",
         ]
         columns_name_edge = [
             "Timestamp",
@@ -412,11 +448,20 @@ class AMLtoGraph(DataCatalog):
         norm_edge_index = dense_to_sparse(torch.tensor(adj_matrix))
 
         array_feat_node = self.get_feat_node(dataGraph, norm_edge_index, node_dict)
+        
         df1 = pd.DataFrame(array_feat_node, columns=columns_name_node)
-
+        df1['idx'] = idx
+        # Account = df1['Account']
+        # laundering = df1['Is Laundering']
+        # df1_drop = df1.drop(columns=['Account','Is Laundering'])
+        # df_inverse_transformed1 = pd.DataFrame(self.scaler_nodes.inverse_transform(df1_drop), columns=df1_drop.columns)
+        
+        ''' UTILIZZARE NEL MOMENTO IN CUI LAVORIAMO CON GLI EDGES
         array_feat_edge = self.get_feat_edges(dataGraph, norm_edge_index, node_dict)
         df2 = pd.DataFrame(array_feat_edge, columns=columns_name_edge)
         # df = pd.DataFrame(array_data, columns=columns_name)
-
-        result = pd.merge(df1, df2, left_on="Account", right_on="Account")
-        return result
+        df_inverse_transformed2 = pd.DataFrame(self.scaler_edges.inverse_transform(df2), columns=df2.columns)
+        '''
+        
+        # result = pd.concat([Account, df_inverse_transformed1, laundering], axis= 1)
+        return df1
