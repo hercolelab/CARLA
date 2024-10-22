@@ -8,26 +8,27 @@ path_file = "/home/hl-turing/VSCodeProjects/Flavio/CARLA/data/AML_Laund_Clean.cs
 # Data
 dataset = AMLtoGraph(path_file)
 
-model_type = 'gat_coo'
-hidden_size = [100,100]
-hidden_list_conv = [50,50]
+model_type = 'gnn_coo'
+hidden_size = [50,50,50,50]
+hidden_list_conv = None
 
 ml_model = MLModelCatalog(
     data=dataset, model_type=model_type, load_online=False, backend="pytorch"
 )
 
 training_params = {
-    "lr": 0.002,
+    "lr": 0.001,
     "epochs": 300,
-    "batch_size": 1028,
+    "batch_size": 647,
     "hidden_size": hidden_size,
     "hidden_size_conv": hidden_list_conv,
     "clip": 1.0,
     
-    "alpha": 0.2,
-    "nheads": 4,
-    "neigh": [100,100,100]
+    "alpha": None,
+    "nheads": None,
+    "neigh": [50,50,50]
 }
+
 
 ml_model.train(
     learning_rate=training_params["lr"],
@@ -59,38 +60,6 @@ def data_testing(csv_file, fraction=0.15, random_state=None):
     
     return sample_df
 
-hyper_gnn = {
-    "cf_optimizer": "Adadelta",
-    "lr": 0.5,
-    "num_epochs": 1000,
-    "hid_list": hidden_size,
-    "dropout": 0.0,
-    "beta": 0.5,
-    "num_classes": 2,
-    "n_layers": 4,
-    "n_momentum": 0,
-    "verbose": True,
-    "device": "cuda",
-    "model_type": "gnn"
-}
-
-hyper_gat = {
-    "cf_optimizer": "Adadelta",
-    "lr": 0.5,
-    "num_epochs": 2000,
-    "hid_attr_list": [30, 30, 30, 30, 30, 30, 30, 30],
-    "hid_list": hidden_size,
-    "dropout": 0.0,
-    "alpha": 0.2,
-    "beta": 0.5,
-    "nheads": 8,
-    "num_classes": 2,
-    "n_layers": 4,
-    "n_momentum": 0,
-    "verbose": True,
-    "device": "cuda",
-    "model_type": model_type
-}
 
 hyper_gin = {
     "cf_optimizer": "Adadelta",
@@ -121,7 +90,7 @@ for _ in range(num_campione):
     test_factual = data_testing(path_file)
     
     if model_type == "gnn":
-        recourse_method = recourse_catalog.CFNodeExplainer(
+        recourse_method = recourse_catalog.CFEdgeExplainer(
             mlmodel=ml_model, data=dataset, hyperparams=hyper_gnn
             )
 
@@ -136,7 +105,7 @@ for _ in range(num_campione):
         print(f"{fidelity_prob_gnn=}")
 
     else:
-        recourse_method = recourse_catalog.CFNodeExplainer(
+        recourse_method = recourse_catalog.CFEdgeExplainer(
             mlmodel=ml_model, data=dataset, hyperparams=hyper_gin
             )
 
@@ -167,4 +136,3 @@ print(f"{std_dev_fidelity=}" )
         # print(f"{sparsity=}")
         # print(f"{validity=}")
         # print(f"{fidelity=}")
-

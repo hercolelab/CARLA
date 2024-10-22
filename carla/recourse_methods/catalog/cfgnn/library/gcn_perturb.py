@@ -102,26 +102,22 @@ class GCNSyntheticPerturb(nn.Module):
         self.use_dropout = dropout > 0.0
 
         current_dim = nfeat
-        i = 0
         for hids in hid_list:
+            self.layers.append(
+                GraphConvolution(in_features=current_dim, out_features=hids)
+            )
 
-            if i == len(hid_list):  # last layer --> Convolution Layer
-                self.layers.append(
-                    GraphConvolution(in_features=current_dim, out_features=hids)
-                )
-            else:  # before last layer --> Convolution Perturb Layer
-                self.layers.append(
-                    GraphConvolutionPerturb(in_features=current_dim, out_features=hids)
-                )
             current_dim = hids
-            i += 1
-
+        
         if self.nclass <= 1:
-            self.layers.append(nn.Linear(sum(hid_list), 1))
+            # self.layers.append(nn.Linear(sum(hid_list_conv), 1))
+            self.layers.append(nn.Linear(current_dim, 1))
         # multiclass
         else:
-            self.layers.append(nn.Linear(sum(hid_list), self.nclass))
+            # self.layers.append(nn.Linear(sum(hid_list_conv), self.nclass))
+            self.layers.append(nn.Linear(current_dim, self.nclass))
         self.dropout = dropout
+
 
         """
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
@@ -178,26 +174,22 @@ class GCNSyntheticPerturb(nn.Module):
         # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
         norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
-        cat_list = []
+
         # Apply a ReLU activation function and dropout (if used) to each hidden layer
-        for layer in self.layers[:-1]:
-            x = layer(x, norm_adj)
-            if isinstance(layer, (GraphConvolution, GraphConvolutionPerturb)):
+        for layer in self.layers:
+            if isinstance(layer, GraphConvolution):
+                x = layer(x, norm_adj)
                 x = F.relu(x)
                 if self.use_dropout:
                     x = F.dropout(x, self.dropout, training=self.training)
-            cat_list.append(x)
+            else:
+                x = layer(x)
+            # cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers[-1](torch.cat(cat_list, dim=1))
+        # x = self.layers[-1](torch.cat(cat_list, dim=1))
 
-        """
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        """
+        # x = self.lin(torch.cat((x1, x2, x3), dim=1)) da vedere
+        # return F.log_softmax(x, dim=1)
         if self.nclass <= 1:
             return F.sigmoid(x)
         # multiclass
@@ -226,28 +218,19 @@ class GCNSyntheticPerturb(nn.Module):
         # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
         norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
 
-        cat_list = []
         # Apply a ReLU activation function and dropout (if used) to each hidden layer
-        for layer in self.layers[:-1]:
-            x = layer(x, norm_adj)
-            if isinstance(layer, (GraphConvolution, GraphConvolutionPerturb)):
+        for layer in self.layers:
+            if isinstance(layer, GraphConvolution):
+                x = layer(x, norm_adj)
                 x = F.relu(x)
                 if self.use_dropout:
                     x = F.dropout(x, self.dropout, training=self.training)
-            cat_list.append(x)
+            else:
+                x = layer(x)
+            # cat_list.append(x)
         # No activation function for the output layer (assuming classification task)
-        x = self.layers[-1](torch.cat(cat_list, dim=1))
+        # x = self.layers[-1](torch.cat(cat_list, dim=1))
 
-        """
-
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-
-        """
         if self.nclass <= 1:
             return F.sigmoid(x), self.P
         # multiclass
@@ -281,8 +264,7 @@ class GCNSyntheticPerturb(nn.Module):
         loss_graph_dist = (
             sum(sum(abs(cf_adj - self.adj.to(device)))) / 2
         )  # Number of edges changed (symmetrical)
-        if y_pred_orig.float() == 1.0:
-            print(y_pred_orig.float())
+
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
         return loss_total, loss_pred, loss_graph_dist, cf_adj

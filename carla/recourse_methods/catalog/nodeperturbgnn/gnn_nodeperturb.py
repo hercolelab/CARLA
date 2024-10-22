@@ -363,7 +363,7 @@ class CFNodeExplainer(RecourseMethod):
 
                 # break
             # one_cf_example = cf_example[0]
-           
+        '''
             try:
                 pd_factual= df_test.reconstruct_Tabular(factual, factual.adj, node_dict, int(i))
                 pd_cf = df_test.reconstruct_Tabular(cf_example, factual.adj, node_dict, int(i))
@@ -401,17 +401,17 @@ class CFNodeExplainer(RecourseMethod):
 
         df_factual_examples.to_csv(path_factual + f"{file_name_factual}.csv")
             # cf_example = [ [cf_example0], [cf_example1], [cf_example2], etc...]
-
+        '''
             # da trasformare cf_example (DataGraph) in DataFrame (utilizzando forse diz_conn)
         # num_graphs = int(idx_test.shape[0])
         validity_acc = num_cf/num_graphs
         sparsity_acc = numerator_sparsity/num_graphs
         fidelity_acc = numerator_fidelity/num_graphs
         
-        print('printo total_nodes:')
-        print(total_nodes)
-        print('printo num_graphs:')
-        print(num_graphs)   
+        #print('printo total_nodes:')
+        #print(total_nodes)
+        #print('printo num_graphs:')
+        #print(num_graphs)   
         return df_cf_examples, num_cf, validity_acc, sparsity_acc, fidelity_acc
 
 def plotting(num_epochs, validity, sparsity, fidelity, model_type):
@@ -450,7 +450,7 @@ def plotting(num_epochs, validity, sparsity, fidelity, model_type):
 
 
 def fidelity(factual: Data, counterfactual: Data):
-    print('sono entrato')
+    # print('sono entrato')
 
     #TODO: Check Fidelity
     factual_index = factual.new_idx

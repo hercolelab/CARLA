@@ -29,8 +29,8 @@ class Perturber(nn.Module, ABC):
                 param.requires_grad = False
             
 
-        for name, param in self.model.raw_model.named_parameters():
-            print("orig model requires_grad: ", name, param.requires_grad)
+        # for name, param in self.model.raw_model.named_parameters():
+            # print("orig model requires_grad: ", name, param.requires_grad)
 
 
     def set_reproducibility(self)->None:

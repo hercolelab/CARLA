@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch_geometric.nn.dense import DenseGATConv, DenseGCNConv
 
-
+'''
 class GAT(nn.Module):
     def __init__(
         self, nfeat, hid_list_att, hid_list_conv, nclass, dropout, alpha, nheads
@@ -275,5 +275,3 @@ class GAT(nn.Module):
         else:
             return F.nll_loss(pred, label)
         # return F.nll_loss(pred, label)
-'''
-

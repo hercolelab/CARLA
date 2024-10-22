@@ -1,12 +1,21 @@
+import os
 from typing import Dict, List, Tuple, Union
+
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.optim as optim
 
+from torch import nn
+from abc import ABC, abstractmethod
+import torch.nn.functional as F
+from torch.nn.parameter import Parameter
+from torch import Tensor
+
 from torch.nn.utils import clip_grad_norm_
 from torch_geometric.utils import dense_to_sparse
+from torch_geometric.data import Data, Dataset
 
 from carla.data.catalog.graph_catalog import AMLtoGraph, PlanetoidGraph
 
@@ -101,7 +110,7 @@ class CFExplainer(RecourseMethod):
         lr: float,
         n_momentum: float,
         num_epochs: int,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         r"""Explain a factual instance:
 
@@ -153,7 +162,7 @@ class CFExplainer(RecourseMethod):
 
         return best_cf_example
 
-    def train(self, epoch: int, verbose: bool = True) -> Tuple[List, float]:
+    def train(self, epoch: int, verbose: bool = False) -> Tuple[List, float]:
         r"""Train the counterfactual model:
 
         Args:
@@ -265,6 +274,14 @@ class CFExplainer(RecourseMethod):
         # Get CF examples in test set
         test_cf_examples = []
         test_cf_sts = []
+
+        df_cf_examples = pd.DataFrame()
+        num_cf = 0
+        numerator_sparsity = 0.0
+        numerator_fidelity = 0.0
+        num_graphs=0
+        total_nodes = 0
+        
         # start = time.time()
         for i in idx_test[:]:
             # funzione get_neighbourhood da vedere su utils.py
@@ -273,7 +290,8 @@ class CFExplainer(RecourseMethod):
                 int(i), norm_edge_index, self.n_layers + 1, features, labels
             )
             new_idx = node_dict[int(i)]
-
+            sub_index = list(node_dict.keys())
+            
             if len(sub_adj.shape) < 1 or all(
                 [True if i == 0 else False for i in sub_adj.shape]
             ):
@@ -283,6 +301,14 @@ class CFExplainer(RecourseMethod):
             self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
             self.y_pred_orig = y_pred_orig[i]
+    
+            factual= Data( x = self.sub_feat,
+                          adj = self.sub_adj,
+                          y = y_pred_orig[sub_index], # sub_y
+                          y_ground = sub_labels,
+                          new_idx = new_idx,
+                          node_dict = node_dict               
+            )
 
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
@@ -350,66 +376,47 @@ class CFExplainer(RecourseMethod):
                 num_epochs=self.num_epochs,
                 verbose=self.verbose,
             )
+            num_graphs+=1
+            
             if len(cf_example) == 0:
                 continue
-            one_cf_example = cf_example[0]
-            test_cf_sts.append(one_cf_example)
+            else:
+                num_cf+=1
+                one_cf_example = cf_example[-1]
+                
+                counterfactual= Data(x = self.sub_feat,
+                                     adj =  one_cf_example[2],
+                                     y = one_cf_example[6], 
+                                     new_idx = one_cf_example[1]              
+                )
+                numerator_fidelity+=fidelity(factual, counterfactual)
+                numerator_sparsity+=sparsity(factual, counterfactual)
+                
+        validity_acc = num_cf/num_graphs
+        sparsity_acc = numerator_sparsity/num_graphs
+        fidelity_acc = numerator_fidelity/num_graphs
+                
+        return df_cf_examples, num_cf, validity_acc, sparsity_acc, fidelity_acc
 
-            # cf_example = [ [cf_example0], [cf_example1], [cf_example2], etc...]
+def fidelity(factual: Data, counterfactual: Data):
+    # print('sono entrato')
 
-            # da trasformare cf_example (DataGraph) in DataFrame (utilizzando forse diz_conn)
+    #TODO: Check Fidelity
+    factual_index = factual.new_idx
+    # cfactual_index = counterfactual.new_idx
+    phi_G = factual.y[factual_index]
+    y = factual.y_ground[factual_index]
+    phi_G_i = counterfactual.y
+    
+    prediction_fidelity = 1 if phi_G == y else 0
+    
+    counterfactual_fidelity = 1 if phi_G_i == y else 0
+    
+    result = prediction_fidelity - counterfactual_fidelity
+    
+    return result
 
-            # prendo da cf_example cf_adj
-            cf_adj = cf_example[0][2]  # dovrei iterare (?)
-            # Qua con Platenoid darà errore
-            pd_cf = df_test.reconstruct_Tabular(data_graph, cf_adj, node_dict)
-            test_cf_examples.append(pd_cf)
-            break
-        df_cf_example = pd.DataFrame(
-            test_cf_sts,
-            columns=[
-                "node_idx",
-                "new_idx",
-                "cf_adj",
-                "sub_adj",
-                "y_pred_orig",
-                "y_pred_new",
-                "y_pred_new_actual",
-                "sub_labels",
-                "sub_adj",
-                "loss_total",
-                "loss_pred",
-                "loss_graph_dist",
-            ],
-        )
+def sparsity(factual: Data, counterfactual: Data):
 
-        path = "test/saved_sts_cf/results1"
-        df_cf_example.to_csv(path + ".csv")
-        return test_cf_examples
-
-
-"""
-            Da chiedere:
-
-            Creerei un'altra lista da riportare in output che sono sostanzialmente i dati per farci
-            statistica di cf_example poiché:
-
-            cf_example = [
-            [
-                self.node_idx.item(),
-                self.new_idx,
-                cf_adj.detach().numpy(),
-                self.sub_adj.detach().numpy(),
-                self.y_pred_orig.item(),
-                y_pred_new.item(),
-                y_pred_new_actual.item(),
-                self.sub_labels[self.new_idx].numpy(),
-                self.sub_adj.shape[0],
-                loss_total.item(),
-                loss_pred.item(),
-                loss_graph_dist.item(),
-            ],
-            ...
-
-            ]
-"""
+    modified_edges = (torch.sum((factual.adj != torch.tensor(counterfactual.adj)))//2)
+    return ((modified_edges) / (factual.adj.numel()//2)).item()

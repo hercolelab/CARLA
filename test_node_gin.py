@@ -82,7 +82,7 @@ fidelity_list = []
 sparsity_list = []
 validity_list = []
 
-num_campione = 10
+num_campione = 5
 
 # Recourse Method
 for _ in range(num_campione):

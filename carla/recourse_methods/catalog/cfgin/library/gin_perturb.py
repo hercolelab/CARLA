@@ -228,8 +228,7 @@ class GINSyntheticPerturb(nn.Module):
         """ """
         device = "cuda" if torch.cuda.is_available() else "cpu"
         pred_same = (y_pred_new_actual == y_pred_orig).float()
-        if pred_same == 1.0:
-            print('sono entrato')
+
 
         # Need dim >=2 for F.nll_loss to work
         output = output.unsqueeze(0)

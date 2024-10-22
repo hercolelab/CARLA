@@ -211,7 +211,7 @@ class CFEdgeExplainer(RecourseMethod):
             
             losses = {"feature":results["loss_feat"], "prediction": results["loss_pred"], "graph":results["loss_graph_dist"]}
             # embedding_repr = torch.mean(oracle.get_embedding_repr(V_pert, cf_adj), dim=0)
-            print(losses)
+            # print(losses)
 
             counterfactual = Data(x=graph.x, 
                                   adj=graph.adj, 
@@ -325,9 +325,7 @@ class CFEdgeExplainer(RecourseMethod):
                 # idx_train = idx_train.cuda()
                 idx_test = idx_test.cuda()
                 
-            print(
-                f"factual: {factual}"
-            )
+            # print(f"factual: {factual}")
             # node to explain i, node_dict maps the old node_idx into the new node_idx
             # because of the subgraph
             cf_example = self.explain(
@@ -342,44 +340,68 @@ class CFEdgeExplainer(RecourseMethod):
             )
             if cf_example is None:
                 num_graphs+=1
+                # numerator_fidelity_prob+= single_fid_prob(self.mlmodel.predict_proba_gnn(factual.x, factual.adj), predict_proba_cf)
                 continue
             else:
                 num_graphs+=1
                 num_cf+=1
                 numerator_fidelity+=fidelity(factual, cf_example)
                 numerator_sparsity+=edge_sparsity(factual, cf_example)
-                print(numerator_sparsity)
-                print(numerator_fidelity)
-                print(cf_example)
+                
+                
+
+                # break
             # one_cf_example = cf_example[0]
-           
-           # LA RITRASFORMAZIONE è DA RIVEDERE
+        '''
             try:
-                pd_factual= df_test.reconstruct_Tabular(factual, factual.adj, node_dict)
-                pd_cf = df_test.reconstruct_Tabular(cf_example, factual.adj, node_dict)
-                print(pd_factual)
-                print(pd_cf)
+                pd_factual= df_test.reconstruct_Tabular(factual, factual.adj, node_dict, int(i))
+                pd_cf = df_test.reconstruct_Tabular(cf_example, factual.adj, node_dict, int(i))
+                #print(pd_factual)
+                #print(pd_cf)
                 df_cf_examples = pd.concat([df_cf_examples, pd_cf], ignore_index=True)
                 df_factual_examples = pd.concat([df_factual_examples, pd_factual], ignore_index=True)
+                
             except AttributeError:
 
                 UserWarning(f"Dataset {factuals} cannot converted into a csv file!")
             
-            if num_graphs == 100:
-                break
-            
+        path_cf: str = "test/saved_cf/"
+
+        file_name_cf: str = "results_cf_"+ self.model_type
+
+        if not os.path.exists(path_cf):
+            try:
+                os.makedirs(path_cf)
+            except Exception:
+                raise Exception
+
+        df_cf_examples.to_csv(path_cf + f"{file_name_cf}.csv")
+        
+        path_factual: str = "test/saved_factual/"
+
+        file_name_factual: str = "results_factual_"+ self.model_type
+
+        if not os.path.exists(path_factual):
+            try:
+                os.makedirs(path_factual)
+            except Exception:
+                raise Exception
+        
+
+        df_factual_examples.to_csv(path_factual + f"{file_name_factual}.csv")
+            # cf_example = [ [cf_example0], [cf_example1], [cf_example2], etc...]
+        '''
             # da trasformare cf_example (DataGraph) in DataFrame (utilizzando forse diz_conn)
         # num_graphs = int(idx_test.shape[0])
         validity_acc = num_cf/num_graphs
         sparsity_acc = numerator_sparsity/num_graphs
         fidelity_acc = numerator_fidelity/num_graphs
         
-        print('printo total_nodes:')
-        print(total_nodes)
-        print('printo num_graphs:')
-        print(num_graphs)   
+        #print('printo total_nodes:')
+        #print(total_nodes)
+        #print('printo num_graphs:')
+        #print(num_graphs)   
         return df_cf_examples, num_cf, validity_acc, sparsity_acc, fidelity_acc
-
 
 
 def fidelity(factual: Data, counterfactual: Data):

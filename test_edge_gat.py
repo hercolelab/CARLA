@@ -121,7 +121,7 @@ for _ in range(num_campione):
     test_factual = data_testing(path_file)
     
     if model_type == "gnn":
-        recourse_method = recourse_catalog.CFNodeExplainer(
+        recourse_method = recourse_catalog.CFEdgeExplainer(
             mlmodel=ml_model, data=dataset, hyperparams=hyper_gnn
             )
 
@@ -136,7 +136,7 @@ for _ in range(num_campione):
         print(f"{fidelity_prob_gnn=}")
 
     else:
-        recourse_method = recourse_catalog.CFNodeExplainer(
+        recourse_method = recourse_catalog.CFEdgeExplainer(
             mlmodel=ml_model, data=dataset, hyperparams=hyper_gin
             )
 

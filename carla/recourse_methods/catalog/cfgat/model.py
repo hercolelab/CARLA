@@ -114,7 +114,7 @@ class CFGATExplainer(RecourseMethod):
         lr: float,
         n_momentum: float,
         num_epochs: int,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         r"""Explain a factual instance:
 
@@ -166,7 +166,7 @@ class CFGATExplainer(RecourseMethod):
 
         return best_cf_example
 
-    def train(self, epoch: int, verbose: bool = True) -> Tuple[List, float]:
+    def train(self, epoch: int, verbose: bool = False) -> Tuple[List, float]:
         r"""Train the counterfactual model:
 
         Args:
@@ -276,6 +276,14 @@ class CFGATExplainer(RecourseMethod):
         # Get CF examples in test set
         test_cf_examples = []
         test_cf_sts = []
+
+        df_cf_examples = pd.DataFrame()
+        num_cf = 0
+        numerator_sparsity = 0.0
+        numerator_fidelity = 0.0
+        num_graphs=0
+        total_nodes = 0
+        
         # start = time.time()
         for i in idx_test[:]:
             # funzione get_neighbourhood da vedere su utils.py
@@ -284,6 +292,7 @@ class CFGATExplainer(RecourseMethod):
                 int(i), norm_edge_index, self.n_layers + 1, features, labels
             )
             new_idx = node_dict[int(i)]
+            sub_index = list(node_dict.keys())
 
             if len(sub_adj.shape) < 1 or len(sub_adj.shape) > 1500 or all(
                 [True if i == 0 else False for i in sub_adj.shape]
@@ -294,6 +303,15 @@ class CFGATExplainer(RecourseMethod):
             self.sub_feat = sub_feat.to(self.device)
             self.sub_labels = sub_labels
             self.y_pred_orig = y_pred_orig[i]
+
+            factual= Data( x = self.sub_feat,
+                          adj = self.sub_adj,
+                          y = y_pred_orig[sub_index], # sub_y
+                          y_ground = sub_labels,
+                          new_idx = new_idx,
+                          node_dict = node_dict               
+            )
+
 
             # Instantiate CF model class, load weights from original model
             # The syntentic model load the weights from the model to explain then freeze them
@@ -370,80 +388,54 @@ class CFGATExplainer(RecourseMethod):
                 num_epochs=self.num_epochs,
                 verbose=self.verbose,
             )
+            num_graphs+=1
             if len(cf_example) == 0:
                 continue
-            one_cf_example = cf_example[0]
-            test_cf_sts.append(one_cf_example)
 
-            # cf_example = [ [cf_example0], [cf_example1], [cf_example2], etc...]
+            else:
+                num_cf+=1
+                one_cf_example = cf_example[-1]
+                
+                counterfactual= Data(x = self.sub_feat,
+                                     adj =  one_cf_example[2],
+                                     y = one_cf_example[6], 
+                                     new_idx = one_cf_example[1]              
+                )
+                numerator_fidelity+=fidelity(factual, counterfactual)
+                numerator_sparsity+=sparsity(factual, counterfactual)
+            
+            
 
-            # da trasformare cf_example (DataGraph) in DataFrame (utilizzando forse diz_conn)
-
-            # prendo da cf_example cf_adj
-            cf_adj = cf_example[0][2]  # dovrei iterare (?)
-
-            try:
-                pd_cf = df_test.reconstruct_Tabular(factuals, cf_adj, node_dict)
-                test_cf_examples.append(pd_cf)
-
-            except AttributeError:
-
-                UserWarning(f"Dataset {factuals} cannot converted into a csv file!")
-
-        df_cf_example = pd.DataFrame(
-            test_cf_sts,
-            columns=[
-                "node_idx",
-                "new_idx",
-                "cf_adj",
-                "sub_adj",
-                "y_pred_orig",
-                "y_pred_new",
-                "y_pred_new_actual",
-                "sub_labels",
-                "sub_adj",
-                "loss_total",
-                "loss_pred",
-                "loss_graph_dist",
-            ],
-        )
-
-        path: str = "test/saved_sts_cf/"
-
-        file_name: str = "results_1"
-
-        if not os.path.exists(path):
-            try:
-                os.makedirs(path)
-            except Exception:
-                raise Exception
-
-        df_cf_example.to_csv(path + f"{file_name}.csv")
-        return test_cf_examples
+        validity_acc = num_cf/num_graphs
+        sparsity_acc = numerator_sparsity/num_graphs
+        fidelity_acc = numerator_fidelity/num_graphs
+        
+        #print('printo total_nodes:')
+        #print(total_nodes)
+        #print('printo num_graphs:')
+        #print(num_graphs)   
+        return df_cf_examples, num_cf, validity_acc, sparsity_acc, fidelity_acc
 
 
-"""
-            Da chiedere:
+def fidelity(factual, counterfactual):
+    # print('sono entrato')
 
-            Creerei un'altra lista da riportare in output che sono sostanzialmente i dati per farci
-            statistica di cf_example poiché:
+    #TODO: Check Fidelity
+    factual_index = factual.new_idx
+    # cfactual_index = counterfactual.new_idx
+    phi_G = factual.y[factual_index]
+    y = factual.y_ground[factual_index]
+    phi_G_i = counterfactual.y
+    
+    prediction_fidelity = 1 if phi_G == y else 0
+    
+    counterfactual_fidelity = 1 if phi_G_i == y else 0
+    
+    result = prediction_fidelity - counterfactual_fidelity
+    
+    return result
 
-            cf_example = [
-            [
-                self.node_idx.item(),
-                self.new_idx,
-                cf_adj.detach().numpy(),
-                self.sub_adj.detach().numpy(),
-                self.y_pred_orig.item(),
-                y_pred_new.item(),
-                y_pred_new_actual.item(),
-                self.sub_labels[self.new_idx].numpy(),
-                self.sub_adj.shape[0],
-                loss_total.item(),
-                loss_pred.item(),
-                loss_graph_dist.item(),
-            ],
-            ...
+def sparsity(factual, counterfactual):
 
-            ]
-"""
+    modified_edges = (torch.sum((factual.adj != torch.tensor(counterfactual.adj)))//2)
+    return ((modified_edges) / (factual.adj.numel()//2)).item()
